@@ -8,10 +8,11 @@ import (
 
 func CORS() gin.HandlerFunc {
 	allowedOrigins := map[string]bool{
-		"http://localhost":      true,
-		"http://localhost:3000": true,
-		"http://127.0.0.1":      true,
-		"http://127.0.0.1:3000": true,
+		"http://localhost":                           true,
+		"http://localhost:3000":                      true,
+		"http://127.0.0.1":                           true,
+		"http://127.0.0.1:3000":                      true,
+		"https://multi-branch-inventory-pos-system.vercel.app": true,
 	}
 
 	return func(c *gin.Context) {
