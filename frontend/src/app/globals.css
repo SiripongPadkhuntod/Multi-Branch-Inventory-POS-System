@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f4f6f8;
+  color: #1f2933;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background: #0f172a;
+  color: #e5edf6;
+}
+
+html.dark .bg-field,
+html.dark .hover\:bg-field:hover,
+html.dark .hover\:\!bg-field:hover {
+  background-color: #111827 !important;
+}
+
+html.dark .bg-white,
+html.dark .\!bg-white,
+html.dark .bg-white\/95,
+html.dark .bg-slate-50 {
+  background-color: #182235 !important;
+}
+
+html.dark .bg-brandSoft,
+html.dark .hover\:bg-brandSoft:hover,
+html.dark .hover\:bg-brandSoft\/40:hover {
+  background-color: rgba(20, 184, 166, 0.14) !important;
+}
+
+html.dark .border-line,
+html.dark .ring-line {
+  border-color: #334155 !important;
+  --tw-ring-color: #334155 !important;
+}
+
+html.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-slate-700,
+html.dark .\!text-slate-700 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-900,
+html.dark .text-ink {
+  color: #f8fafc !important;
+}
+
+html.dark .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+
+html.dark .text-red-700 {
+  color: #fecaca !important;
+}
+
+html.dark .bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.35) !important;
+}
+
+html.dark .border-red-200 {
+  border-color: rgba(248, 113, 113, 0.35) !important;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #0f172a;
+  color: #e5edf6;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b;
+}
+
+html.dark .shadow-sm,
+html.dark .shadow-xl,
+html.dark .shadow-2xl {
+  --tw-shadow-color: rgba(0, 0, 0, 0.35) !important;
+}
+
+html.dark svg .fill-slate-500 {
+  fill: #94a3b8 !important;
+}
+
+html.dark svg .fill-slate-700 {
+  fill: #cbd5e1 !important;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: #cce7e1;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
