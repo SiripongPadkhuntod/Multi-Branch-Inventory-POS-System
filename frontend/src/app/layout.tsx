@@ -7,6 +7,8 @@ try {
   var theme = localStorage.getItem("theme");
   if (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark";
   if (theme === "dark") document.documentElement.classList.add("dark");
+  var language = localStorage.getItem("language");
+  if (language === "th" || language === "en") document.documentElement.lang = language;
 } catch (_) {}
 `;
 

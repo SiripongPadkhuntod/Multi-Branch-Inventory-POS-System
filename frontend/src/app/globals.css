@@ -111,6 +111,68 @@ textarea {
   font: inherit;
 }
 
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+select {
+  min-height: 44px;
+}
+
+main {
+  overflow-x: hidden;
+}
+
+@media (max-width: 640px) {
+  h1 {
+    font-size: 1.375rem;
+    line-height: 1.8rem;
+  }
+
+  .fixed.inset-0.z-50.grid.place-items-center {
+    align-items: end;
+    padding: 0;
+  }
+
+  .fixed.inset-0.z-50.grid.place-items-center > div {
+    width: 100%;
+    max-width: none;
+    max-height: min(88vh, calc(100vh - 24px));
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    padding: 1rem;
+  }
+
+  .fixed.inset-0.z-50.grid.place-items-center > div.max-w-md,
+  .fixed.inset-0.z-50.grid.place-items-center > div.max-w-lg,
+  .fixed.inset-0.z-50.grid.place-items-center > div.max-w-xl,
+  .fixed.inset-0.z-50.grid.place-items-center > div.max-w-3xl {
+    max-width: none;
+  }
+
+  button,
+  a {
+    touch-action: manipulation;
+  }
+
+  main {
+    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  nav.fixed.bottom-0 {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 ::selection {
   background: #cce7e1;
 }
