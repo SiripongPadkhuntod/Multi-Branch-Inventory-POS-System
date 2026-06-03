@@ -14,12 +14,19 @@ type Config struct {
 	AccessTTL    time.Duration
 	RefreshTTL   time.Duration
 	CookieSecure bool
+	MinioEndpoint string
+	MinioAccessKey string
+	MinioSecretKey string
+	MinioUseSSL    bool
+	MinioBucketName string
+	MinioPublicURL  string
 }
 
 func Load() Config {
 	accessMinutes := intEnv("ACCESS_TOKEN_TTL_MINUTES", 15)
 	refreshHours := intEnv("REFRESH_TOKEN_TTL_HOURS", 168)
 	appEnv := env("APP_ENV", "development")
+	minioUseSSL, _ := strconv.ParseBool(env("MINIO_USE_SSL", "false"))
 
 	return Config{
 		AppEnv:       appEnv,
@@ -29,6 +36,12 @@ func Load() Config {
 		AccessTTL:    time.Duration(accessMinutes) * time.Minute,
 		RefreshTTL:   time.Duration(refreshHours) * time.Hour,
 		CookieSecure: appEnv == "production",
+		MinioEndpoint:   env("MINIO_ENDPOINT", "minio:9000"),
+		MinioAccessKey:  env("MINIO_ACCESS_KEY", "minioadmin"),
+		MinioSecretKey:  env("MINIO_SECRET_KEY", "minioadminpassword"),
+		MinioUseSSL:     minioUseSSL,
+		MinioBucketName: env("MINIO_BUCKET_NAME", "products"),
+		MinioPublicURL:  env("MINIO_PUBLIC_URL", "http://localhost:9000"),
 	}
 }
 

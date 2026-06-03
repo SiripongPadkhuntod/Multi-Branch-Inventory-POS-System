@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,6 +15,7 @@ import (
 	"pos-system/backend/internal/delivery/http/middleware"
 	"pos-system/backend/internal/domain"
 	"pos-system/backend/internal/infrastructure/config"
+	"pos-system/backend/internal/infrastructure/storage"
 	"pos-system/backend/internal/usecase"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,12 @@ func NewRouter(cfg config.Config, services *usecase.Services) *gin.Engine {
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+	
+	minioStorage, err := storage.NewMinioStorage(cfg)
+	if err != nil {
+		log.Printf("Warning: failed to initialize MinIO storage: %v", err)
+	}
+
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), middleware.CORS())
 	r.Static("/uploads", "./uploads")
@@ -35,7 +42,7 @@ func NewRouter(cfg config.Config, services *usecase.Services) *gin.Engine {
 
 	protected := v1.Group("")
 	protected.Use(middleware.Auth(services.Auth))
-	registerProducts(protected, services)
+	registerProducts(protected, services, minioStorage)
 	registerInventories(protected, services)
 	registerSales(protected, services)
 	registerUsers(protected, services)
@@ -81,7 +88,7 @@ func registerAuth(r *gin.RouterGroup, cfg config.Config, services *usecase.Servi
 	})
 }
 
-func registerProducts(r *gin.RouterGroup, services *usecase.Services) {
+func registerProducts(r *gin.RouterGroup, services *usecase.Services, storage *storage.MinioStorage) {
 	r.GET("/products", func(c *gin.Context) {
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
@@ -160,17 +167,18 @@ func registerProducts(r *gin.RouterGroup, services *usecase.Services) {
 			ext = originalExt
 		}
 
-		if err := os.MkdirAll("./uploads/products", 0755); err != nil {
-			fail(c, http.StatusInternalServerError, err)
+		if storage == nil {
+			fail(c, http.StatusInternalServerError, errors.New("storage service not initialized"))
 			return
 		}
+
 		filename := fmt.Sprintf("%s%s", uuid.NewString(), ext)
-		destination := filepath.Join("uploads", "products", filename)
-		if err := c.SaveUploadedFile(fileHeader, destination); err != nil {
-			fail(c, http.StatusInternalServerError, err)
+		url, err := storage.UploadFile(c.Request.Context(), filename, file, fileHeader.Size, contentType)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, fmt.Errorf("failed to upload image: %w", err))
 			return
 		}
-		ok(c, "Image uploaded", gin.H{"image_url": "/" + filepath.ToSlash(destination)})
+		ok(c, "Image uploaded", gin.H{"image_url": url})
 	})
 	owner.POST("", func(c *gin.Context) {
 		var input domain.Product
