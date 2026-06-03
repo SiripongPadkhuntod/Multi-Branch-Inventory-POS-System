@@ -1,0 +1,66 @@
+services:
+  # 1. Database Service (PostgreSQL)
+  - type: database
+    name: pos-db
+    databaseName: pos
+    user: pos
+    plan: free # Note: Render free plan databases expire after 90 days. Upgrade for production use.
+
+  # 2. Go Backend Web Service
+  - type: web
+    name: pos-backend
+    runtime: docker
+    dockerContext: backend
+    dockerfilePath: Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: APP_ENV
+        value: production
+      - key: DB_HOST
+        fromDatabase:
+          name: pos-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: pos-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: pos-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: pos-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: pos-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+
+  # 3. Next.js Frontend Web Service
+  - type: web
+    name: pos-frontend
+    runtime: docker
+    dockerContext: frontend
+    dockerfilePath: Dockerfile
+    plan: free
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromRoute:
+          service: pos-backend
+          path: /api/v1
+
+  # 4. CloudBeaver Database Admin Tool
+  - type: web
+    name: pos-cloudbeaver
+    runtime: image
+    image: dbeaver/cloudbeaver:latest
+    plan: free
+    disk:
+      name: cloudbeaver-data
+      mountPath: /opt/cloudbeaver/workspace
+      sizeGB: 1
