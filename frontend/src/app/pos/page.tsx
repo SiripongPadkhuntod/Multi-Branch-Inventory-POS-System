@@ -1,6 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { ReceiptModal } from "@/components/sales/receipt-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProductImage } from "@/components/ui/product-image";
@@ -9,8 +10,8 @@ import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCartStore } from "@/stores/cart-store";
 import { useToastStore } from "@/stores/toast-store";
-import type { PaymentMethod, Product } from "@/types/domain";
-import { CreditCard, Minus, Plus, ScanBarcode, Trash2 } from "lucide-react";
+import type { PaymentMethod, Product, SaleDetail } from "@/types/domain";
+import { CreditCard, Minus, Plus, Printer, ScanBarcode, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const money = (value: number) => `฿${(value / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
@@ -23,6 +24,8 @@ export default function POSPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [receiptDetail, setReceiptDetail] = useState<SaleDetail | null>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.final_price * item.quantity, 0), [items]);
@@ -67,6 +70,14 @@ export default function POSPage() {
       clear();
       setNotice(`Receipt ${sale.receipt_number} paid ${money(sale.total)}`);
       toast({ type: "success", title: "Checkout complete", message: sale.receipt_number });
+      try {
+        const detail = await api.saleDetail(sale.id);
+        setReceiptDetail(detail);
+        setReceiptOpen(true);
+      } catch {
+        setReceiptDetail(null);
+        toast({ type: "error", title: "Receipt preview unavailable", message: "Open it later from My Sales." });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Checkout failed");
       toast({ type: "error", title: "Checkout failed", message: err instanceof Error ? err.message : "Please try again" });
@@ -86,6 +97,15 @@ export default function POSPage() {
         </Button>
       </div>
       {notice ? <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{notice}</div> : null}
+      {receiptDetail ? (
+        <div className="mb-4 flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 sm:flex-row sm:items-center sm:justify-between">
+          <span className="font-medium">Receipt {receiptDetail.receipt_number} is ready.</span>
+          <Button className="bg-slate-800 hover:bg-slate-700" onClick={() => setReceiptOpen(true)}>
+            <Printer className="h-4 w-4" />
+            View Receipt
+          </Button>
+        </div>
+      ) : null}
       {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">{error}</div> : null}
       <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
         <section className="space-y-4">
@@ -181,6 +201,7 @@ export default function POSPage() {
           </div>
         </aside>
       </div>
+      <ReceiptModal open={receiptOpen} detail={receiptDetail} onClose={() => setReceiptOpen(false)} />
     </AppShell>
   );
 }

@@ -35,14 +35,15 @@ const (
 )
 
 type User struct {
-	ID           uuid.UUID  `json:"id"`
-	BranchID     *uuid.UUID `json:"branch_id"`
-	Role         Role       `json:"role"`
-	Name         string     `json:"name"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"`
-	Status       string     `json:"status"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID           uuid.UUID   `json:"id"`
+	BranchID     *uuid.UUID  `json:"branch_id"`
+	BranchIDs    []uuid.UUID `json:"branch_ids,omitempty"`
+	Role         Role        `json:"role"`
+	Name         string      `json:"name"`
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"-"`
+	Status       string      `json:"status"`
+	CreatedAt    time.Time   `json:"created_at"`
 }
 
 type EmployeeSalesSummary struct {
@@ -67,6 +68,20 @@ type Branch struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type AuditLog struct {
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"user_id"`
+	UserName   string    `json:"user_name"`
+	UserEmail  string    `json:"user_email"`
+	Action     string    `json:"action"`
+	EntityType string    `json:"entity_type"`
+	EntityID   uuid.UUID `json:"entity_id"`
+	OldData    string    `json:"old_data"`
+	NewData    string    `json:"new_data"`
+	IPAddress  string    `json:"ip_address"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type Category struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
@@ -81,11 +96,12 @@ type TopProduct struct {
 }
 
 type LowStockItem struct {
-	BranchID    uuid.UUID `json:"branch_id"`
-	BranchCode  string    `json:"branch_code"`
-	ProductID   uuid.UUID `json:"product_id"`
-	ProductName string    `json:"product_name"`
-	Quantity    int64     `json:"quantity"`
+	BranchID         uuid.UUID `json:"branch_id"`
+	BranchCode       string    `json:"branch_code"`
+	ProductID        uuid.UUID `json:"product_id"`
+	ProductName      string    `json:"product_name"`
+	Quantity         int64     `json:"quantity"`
+	ReorderThreshold int64     `json:"reorder_threshold"`
 }
 
 type BranchSalesSummary struct {
@@ -126,6 +142,7 @@ type Inventory struct {
 	ProductID        uuid.UUID `json:"product_id"`
 	Quantity         int64     `json:"quantity"`
 	ReservedQuantity int64     `json:"reserved_quantity"`
+	ReorderThreshold int64     `json:"reorder_threshold"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
@@ -152,6 +169,7 @@ type BranchStockDetail struct {
 	BranchName       string    `json:"branch_name"`
 	Quantity         int64     `json:"quantity"`
 	ReservedQuantity int64     `json:"reserved_quantity"`
+	ReorderThreshold int64     `json:"reorder_threshold"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
@@ -197,6 +215,7 @@ type Sale struct {
 	Tax           int64     `json:"tax"`
 	Total         int64     `json:"total"`
 	PaymentStatus string    `json:"payment_status"`
+	RefundStatus  string    `json:"refund_status"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -207,6 +226,7 @@ type SaleItemDetail struct {
 	Barcode        string    `json:"barcode"`
 	ProductName    string    `json:"product_name"`
 	Quantity       int64     `json:"quantity"`
+	ReturnedQty    int64     `json:"returned_quantity"`
 	OriginalPrice  int64     `json:"original_price"`
 	FinalPrice     int64     `json:"final_price"`
 	DiscountAmount int64     `json:"discount_amount"`

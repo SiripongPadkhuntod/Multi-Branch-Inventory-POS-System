@@ -1,12 +1,15 @@
 "use client";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { RefundModal } from "@/components/sales/refund-modal";
+import { printReceipt, ReceiptModal } from "@/components/sales/receipt-modal";
+import { canRefundSale, SaleStatus } from "@/components/sales/sale-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { api } from "@/services/api";
 import type { Sale, SaleDetail } from "@/types/domain";
-import { CalendarDays, ChevronDown, ChevronUp, CreditCard, Package, ReceiptText, Search, X } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronUp, CreditCard, Eye, Package, Printer, ReceiptText, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const money = (value: number) => `฿${(value / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
@@ -15,6 +18,9 @@ export default function MySalesPage() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [selectedSaleId, setSelectedSaleId] = useState("");
   const [detail, setDetail] = useState<SaleDetail | null>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refunding, setRefunding] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dateFrom, setDateFrom] = useState("");
@@ -29,6 +35,8 @@ export default function MySalesPage() {
       setSales(Array.isArray(data) ? data : []);
       setSelectedSaleId("");
       setDetail(null);
+      setReceiptOpen(false);
+      setRefundOpen(false);
     } catch (err) {
       setSales([]);
       setError(err instanceof Error ? err.message : "Cannot load sales");
@@ -51,6 +59,8 @@ export default function MySalesPage() {
     if (selectedSaleId === sale.id) {
       setSelectedSaleId("");
       setDetail(null);
+      setReceiptOpen(false);
+      setRefundOpen(false);
       return;
     }
     setSelectedSaleId(sale.id);
@@ -63,6 +73,22 @@ export default function MySalesPage() {
       setError(err instanceof Error ? err.message : "Cannot load receipt detail");
     } finally {
       setLoadingDetail(false);
+    }
+  }
+
+  async function refund(items: { product_id: string; quantity: number }[]) {
+    if (!detail) return;
+    setError("");
+    setRefunding(true);
+    try {
+      await api.refundSale(detail.id, items);
+      setRefundOpen(false);
+      setDetail(await api.saleDetail(detail.id));
+      await loadSales();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Refund failed");
+    } finally {
+      setRefunding(false);
     }
   }
 
@@ -115,7 +141,7 @@ export default function MySalesPage() {
                 <div className="flex items-center gap-4 text-right">
                   <div>
                     <div className="font-bold">{money(sale.total)}</div>
-                    <div className="text-xs text-emerald-700">{sale.payment_status}</div>
+                    <SaleStatus sale={sale} />
                   </div>
                   {selectedSaleId === sale.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </div>
@@ -183,9 +209,22 @@ export default function MySalesPage() {
                           <div className="mt-2 flex justify-between border-t border-line pt-2 text-lg font-bold"><span>Total</span><span>{money(detail.total)}</span></div>
                         </div>
                       </div>
-                      <Button className="bg-slate-800 hover:bg-slate-700" onClick={() => window.print()}>
-                        Print Receipt
-                      </Button>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button className="bg-slate-800 hover:bg-slate-700" onClick={() => setReceiptOpen(true)}>
+                          <Eye className="h-4 w-4" />
+                          View Receipt
+                        </Button>
+                        <Button onClick={() => printReceipt(detail)}>
+                          <Printer className="h-4 w-4" />
+                          Print Receipt
+                        </Button>
+                        {canRefundSale(detail) ? (
+                          <Button className="bg-red-600 hover:bg-red-700" onClick={() => setRefundOpen(true)}>
+                            <RotateCcw className="h-4 w-4" />
+                            Refund / Return
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -195,6 +234,8 @@ export default function MySalesPage() {
         )}
       </div>
       )}
+      <ReceiptModal open={receiptOpen} detail={detail} onClose={() => setReceiptOpen(false)} />
+      <RefundModal open={refundOpen} detail={detail} loading={refunding} onClose={() => setRefundOpen(false)} onConfirm={refund} />
     </AppShell>
   );
 }

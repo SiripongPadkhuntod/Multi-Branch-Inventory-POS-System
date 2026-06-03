@@ -15,6 +15,7 @@ type StockForm = {
   branch_id: string;
   product_id: string;
   quantity_delta: number;
+  reorder_threshold: number;
   reason: string;
   mode: "receive" | "adjust";
 };
@@ -25,7 +26,7 @@ export default function InventoryPage() {
   const [inventories, setInventories] = useState<Inventory[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [query, setQuery] = useState("");
-  const [form, setForm] = useState<StockForm>({ branch_id: "", product_id: "", quantity_delta: 1, reason: "Owner stock update", mode: "receive" });
+  const [form, setForm] = useState<StockForm>({ branch_id: "", product_id: "", quantity_delta: 1, reorder_threshold: 10, reason: "Owner stock update", mode: "receive" });
   const [formOpen, setFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
@@ -80,6 +81,7 @@ export default function InventoryPage() {
       branch_id: item.branch_id,
       product_id: item.product_id,
       quantity_delta: 1,
+      reorder_threshold: item.reorder_threshold,
       reason: "Owner stock update",
       mode: "receive"
     });
@@ -93,6 +95,7 @@ export default function InventoryPage() {
       branch_id: selectedBranchId || branches[0]?.id || "",
       product_id: products[0]?.id || "",
       quantity_delta: 1,
+      reorder_threshold: 10,
       reason: "Owner stock update",
       mode: "receive"
     });
@@ -117,6 +120,7 @@ export default function InventoryPage() {
       } else {
         await api.adjustStock(form.branch_id, form.product_id, delta, form.reason);
       }
+      await api.setReorderThreshold(form.branch_id, form.product_id, Math.max(0, Math.round(Number(form.reorder_threshold))));
       setNotice("Stock updated");
       toast({ type: "success", title: "Stock updated" });
       closeStockAction();
@@ -124,6 +128,25 @@ export default function InventoryPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Stock update failed");
       toast({ type: "error", title: "Stock update failed", message: err instanceof Error ? err.message : "Please try again" });
+    }
+  }
+
+  async function saveThresholdOnly() {
+    setNotice("");
+    setError("");
+    if (!form.branch_id || !form.product_id) {
+      setError("Branch and product are required");
+      return;
+    }
+    try {
+      await api.setReorderThreshold(form.branch_id, form.product_id, Math.max(0, Math.round(Number(form.reorder_threshold))));
+      setNotice("Reorder threshold updated");
+      toast({ type: "success", title: "Threshold updated" });
+      closeStockAction();
+      await load(form.branch_id, query);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Threshold update failed");
+      toast({ type: "error", title: "Threshold update failed", message: err instanceof Error ? err.message : "Please try again" });
     }
   }
 
@@ -161,22 +184,28 @@ export default function InventoryPage() {
             {inventories.map((item) => {
               const product = productMap.get(item.product_id);
               const branch = branchMap.get(item.branch_id);
+              const lowStock = item.quantity <= item.reorder_threshold;
               return (
-                <button key={item.id} className="grid w-full gap-3 border-b border-line p-4 text-left last:border-b-0 hover:bg-field md:grid-cols-[1fr_120px_120px] md:items-center" onClick={() => selectInventory(item)}>
+                <button key={item.id} className="grid w-full gap-3 border-b border-line p-4 text-left last:border-b-0 hover:bg-field md:grid-cols-[1fr_120px_120px_120px] md:items-center" onClick={() => selectInventory(item)}>
                   <div className="flex min-w-0 items-center gap-3">
                     <ProductImage src={product?.image_url} name={product?.name ?? item.product_id} />
                     <div className="min-w-0">
                       <div className="truncate font-semibold">{product?.name ?? item.product_id}</div>
                       <div className="text-xs text-slate-500">{branch?.code ?? "Branch"} · {product ? `${product.sku} · ${product.barcode}` : "Product details unavailable"}</div>
+                      {lowStock ? <div className="mt-1 text-xs font-semibold text-red-600">Low stock</div> : null}
                     </div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">On hand</div>
-                    <div className="text-xl font-bold">{item.quantity}</div>
+                    <div className={lowStock ? "text-xl font-bold text-red-600" : "text-xl font-bold"}>{item.quantity}</div>
                   </div>
                   <div className="md:text-right">
                     <div className="text-xs text-slate-500">Reserved</div>
                     <div className="font-semibold">{item.reserved_quantity}</div>
+                  </div>
+                  <div className="md:text-right">
+                    <div className="text-xs text-slate-500">Reorder at</div>
+                    <div className="font-semibold">{item.reorder_threshold}</div>
                   </div>
                 </button>
               );
@@ -215,10 +244,12 @@ export default function InventoryPage() {
                 </select>
               </label>
               <label className="block text-sm font-semibold">Quantity Delta<Input className="mt-1" type="number" value={form.quantity_delta} onChange={(event) => setForm({ ...form, quantity_delta: Number(event.target.value) })} /></label>
+              <label className="block text-sm font-semibold">Reorder Threshold<Input className="mt-1" type="number" min={0} value={form.reorder_threshold} onChange={(event) => setForm({ ...form, reorder_threshold: Number(event.target.value) })} /></label>
               <label className="block text-sm font-semibold">Reason<Input className="mt-1" value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
             </div>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button className="!bg-white !text-slate-700 ring-1 ring-line hover:!bg-field" onClick={closeStockAction}>Cancel</Button>
+              <Button className="!bg-white !text-slate-700 ring-1 ring-line hover:!bg-field" onClick={saveThresholdOnly}>Save Threshold Only</Button>
               <Button onClick={saveStock}><Save className="h-4 w-4" />Apply Stock Update</Button>
             </div>
           </div>

@@ -3,8 +3,13 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"pos-system/backend/internal/delivery/http/middleware"
@@ -22,6 +27,7 @@ func NewRouter(cfg config.Config, services *usecase.Services) *gin.Engine {
 	}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), middleware.CORS())
+	r.Static("/uploads", "./uploads")
 	registerSwagger(r)
 
 	v1 := r.Group("/api/v1")
@@ -36,6 +42,7 @@ func NewRouter(cfg config.Config, services *usecase.Services) *gin.Engine {
 	registerBranches(protected, services)
 	registerCategories(protected, services)
 	registerDashboard(protected, services)
+	registerAuditLogs(protected, services)
 
 	r.NoRoute(func(c *gin.Context) {
 		fail(c, http.StatusNotFound, errors.New("route not found"))
@@ -107,6 +114,64 @@ func registerProducts(r *gin.RouterGroup, services *usecase.Services) {
 		ok(c, "Success", product)
 	})
 	owner := r.Group("/products", middleware.OwnerOnly())
+	owner.POST("/upload-image", func(c *gin.Context) {
+		fileHeader, err := c.FormFile("image")
+		if err != nil {
+			fail(c, http.StatusBadRequest, errors.New("image file is required"))
+			return
+		}
+		if fileHeader.Size > 5*1024*1024 {
+			fail(c, http.StatusBadRequest, errors.New("image file must be 5MB or smaller"))
+			return
+		}
+		file, err := fileHeader.Open()
+		if err != nil {
+			fail(c, http.StatusBadRequest, err)
+			return
+		}
+		defer file.Close()
+
+		header := make([]byte, 512)
+		n, err := file.Read(header)
+		if err != nil && err != io.EOF {
+			fail(c, http.StatusBadRequest, err)
+			return
+		}
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			fail(c, http.StatusBadRequest, err)
+			return
+		}
+
+		contentType := http.DetectContentType(header[:n])
+		extensions := map[string]string{
+			"image/jpeg": ".jpg",
+			"image/png":  ".png",
+			"image/webp": ".webp",
+			"image/gif":  ".gif",
+		}
+		ext, supported := extensions[contentType]
+		if !supported {
+			fail(c, http.StatusBadRequest, errors.New("only JPG, PNG, WEBP, or GIF images are supported"))
+			return
+		}
+		originalExt := strings.ToLower(filepath.Ext(fileHeader.Filename))
+		switch originalExt {
+		case ".jpg", ".jpeg", ".png", ".webp", ".gif":
+			ext = originalExt
+		}
+
+		if err := os.MkdirAll("./uploads/products", 0755); err != nil {
+			fail(c, http.StatusInternalServerError, err)
+			return
+		}
+		filename := fmt.Sprintf("%s%s", uuid.NewString(), ext)
+		destination := filepath.Join("uploads", "products", filename)
+		if err := c.SaveUploadedFile(fileHeader, destination); err != nil {
+			fail(c, http.StatusInternalServerError, err)
+			return
+		}
+		ok(c, "Image uploaded", gin.H{"image_url": "/" + filepath.ToSlash(destination)})
+	})
 	owner.POST("", func(c *gin.Context) {
 		var input domain.Product
 		if err := c.ShouldBindJSON(&input); err != nil {
@@ -219,6 +284,27 @@ func registerInventories(r *gin.RouterGroup, services *usecase.Services) {
 	})
 	r.POST("/inventories/adjust", middleware.OwnerOnly(), adjustInventory(services, "Stock adjusted"))
 	r.POST("/inventories/receive", middleware.OwnerOrManager(), receiveInventory(services))
+	r.POST("/inventories/reorder-threshold", middleware.OwnerOrManager(), func(c *gin.Context) {
+		user := c.MustGet(middleware.CurrentUserKey).(domain.User)
+		var input struct {
+			BranchID         uuid.UUID `json:"branch_id" binding:"required"`
+			ProductID        uuid.UUID `json:"product_id" binding:"required"`
+			ReorderThreshold int64     `json:"reorder_threshold" binding:"min=0"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			fail(c, http.StatusBadRequest, err)
+			return
+		}
+		if user.Role == domain.RoleManager && !canAccessBranch(c.Request.Context(), services, user, input.BranchID) {
+			fail(c, http.StatusForbidden, errors.New("manager cannot update this branch threshold"))
+			return
+		}
+		if err := services.Inventory.SetReorderThreshold(c.Request.Context(), input.BranchID, input.ProductID, input.ReorderThreshold); err != nil {
+			fail(c, http.StatusBadRequest, err)
+			return
+		}
+		ok(c, "Reorder threshold updated", nil)
+	})
 	r.POST("/inventories/transfer", middleware.OwnerOnly(), func(c *gin.Context) {
 		user := c.MustGet(middleware.CurrentUserKey).(domain.User)
 		var input struct {
@@ -592,5 +678,17 @@ func registerDashboard(r *gin.RouterGroup, services *usecase.Services) {
 			return
 		}
 		ok(c, "Success", summary)
+	})
+}
+
+func registerAuditLogs(r *gin.RouterGroup, services *usecase.Services) {
+	r.GET("/audit-logs", middleware.OwnerOnly(), func(c *gin.Context) {
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "150"))
+		logs, err := services.Audit.List(c.Request.Context(), c.Query("action"), c.Query("entity_type"), c.Query("q"), limit)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, err)
+			return
+		}
+		ok(c, "Success", logs)
 	})
 }

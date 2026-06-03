@@ -103,6 +103,7 @@ export default function AllStockPage() {
                         <div className="font-semibold">{branch.branch_code} · {branch.branch_name}</div>
                         <div className="mt-2 flex justify-between"><span>On hand</span><span className="font-bold">{branch.quantity.toLocaleString()}</span></div>
                         <div className="flex justify-between text-slate-500"><span>Reserved</span><span>{branch.reserved_quantity.toLocaleString()}</span></div>
+                        <div className="flex justify-between text-slate-500"><span>Reorder at</span><span>{branch.reorder_threshold.toLocaleString()}</span></div>
                       </div>
                     ))}
                   </div>

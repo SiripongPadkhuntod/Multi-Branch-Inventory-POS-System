@@ -68,6 +68,7 @@ CREATE TABLE inventories (
   product_id UUID NOT NULL REFERENCES products(id),
   quantity BIGINT NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   reserved_quantity BIGINT NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),
+  reorder_threshold BIGINT NOT NULL DEFAULT 10 CHECK (reorder_threshold >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,

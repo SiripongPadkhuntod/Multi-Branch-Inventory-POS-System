@@ -142,7 +142,7 @@ export default function DashboardPage() {
             {summary.low_stock.map((item) => (
               <div key={`${item.branch_id}-${item.product_id}`} className="flex justify-between gap-3 rounded-md bg-field p-3 text-sm">
                 <span className="font-medium">{item.branch_code} · {item.product_name}</span>
-                <span>{item.quantity}</span>
+                <span>{item.quantity} / {item.reorder_threshold}</span>
               </div>
             ))}
           </div>
@@ -385,7 +385,7 @@ function BranchComparisonChart({ branches }: { branches: DashboardSummary["branc
 function LowStockChart({ items }: { items: DashboardSummary["low_stock"] }) {
   const t = useI18nStore((state) => state.t);
   const shownItems = items.slice(0, 8);
-  const maxQuantity = Math.max(...shownItems.map((item) => item.quantity), 10);
+  const maxQuantity = Math.max(...shownItems.map((item) => item.reorder_threshold), 10);
   return (
     <article className="rounded-md border border-line bg-white p-4">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -401,7 +401,7 @@ function LowStockChart({ items }: { items: DashboardSummary["low_stock"] }) {
           <div key={`${item.branch_id}-${item.product_id}`} className="rounded-md bg-field p-3">
             <div className="flex justify-between gap-3 text-sm">
               <span className="truncate font-medium">{item.branch_code} · {item.product_name}</span>
-              <span className="font-semibold">{item.quantity}</span>
+              <span className="font-semibold">{item.quantity} / {item.reorder_threshold}</span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
               <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(8, (item.quantity / maxQuantity) * 100)}%` }} />

@@ -14,6 +14,25 @@ import (
 
 type SaleRepo struct{ db *pgxpool.Pool }
 
+const saleRefundStatusSQL = `
+	CASE
+		WHEN COALESCE((
+			SELECT SUM(im.quantity)
+			FROM inventory_movements im
+			WHERE im.reference_id=s.id::text AND im.movement_type='RETURN' AND im.deleted_at IS NULL
+		), 0) = 0 THEN 'NONE'
+		WHEN COALESCE((
+			SELECT SUM(im.quantity)
+			FROM inventory_movements im
+			WHERE im.reference_id=s.id::text AND im.movement_type='RETURN' AND im.deleted_at IS NULL
+		), 0) >= COALESCE((
+			SELECT SUM(si.quantity)
+			FROM sale_items si
+			WHERE si.sale_id=s.id AND si.deleted_at IS NULL
+		), 0) THEN 'REFUNDED'
+		ELSE 'PARTIAL_REFUND'
+	END`
+
 func (r *SaleRepo) CreateSale(ctx context.Context, actor domain.User, input domain.CreateSaleInput) (*domain.Sale, error) {
 	if isBranchStaff(actor) && (actor.BranchID == nil || *actor.BranchID != input.BranchID) {
 		return nil, errors.New("staff cannot sell outside assigned branch")
@@ -67,6 +86,7 @@ func (r *SaleRepo) CreateSale(ctx context.Context, actor domain.User, input doma
 	if err != nil {
 		return nil, err
 	}
+	sale.RefundStatus = "NONE"
 
 	for _, item := range input.Items {
 		var originalPrice int64
@@ -112,14 +132,14 @@ func (r *SaleRepo) List(ctx context.Context, actor domain.User, branchID *uuid.U
 		employeeID = &actor.ID
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT id, receipt_number, branch_id, employee_id, subtotal, discount, tax, total, payment_status, created_at
-		FROM sales
-		WHERE deleted_at IS NULL
-			AND ($1::uuid IS NULL OR branch_id=$1)
-			AND ($2::uuid IS NULL OR employee_id=$2)
-			AND ($3::timestamptz IS NULL OR created_at >= $3)
-			AND ($4::timestamptz IS NULL OR created_at < $4)
-		ORDER BY created_at DESC LIMIT 100`, filterBranch, employeeID, dateFrom, dateTo)
+		SELECT s.id, s.receipt_number, s.branch_id, s.employee_id, s.subtotal, s.discount, s.tax, s.total, s.payment_status, `+saleRefundStatusSQL+`, s.created_at
+		FROM sales s
+		WHERE s.deleted_at IS NULL
+			AND ($1::uuid IS NULL OR s.branch_id=$1)
+			AND ($2::uuid IS NULL OR s.employee_id=$2)
+			AND ($3::timestamptz IS NULL OR s.created_at >= $3)
+			AND ($4::timestamptz IS NULL OR s.created_at < $4)
+		ORDER BY s.created_at DESC LIMIT 100`, filterBranch, employeeID, dateFrom, dateTo)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +148,7 @@ func (r *SaleRepo) List(ctx context.Context, actor domain.User, branchID *uuid.U
 	sales := make([]domain.Sale, 0)
 	for rows.Next() {
 		var s domain.Sale
-		if err := rows.Scan(&s.ID, &s.ReceiptNumber, &s.BranchID, &s.EmployeeID, &s.Subtotal, &s.Discount, &s.Tax, &s.Total, &s.PaymentStatus, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.ReceiptNumber, &s.BranchID, &s.EmployeeID, &s.Subtotal, &s.Discount, &s.Tax, &s.Total, &s.PaymentStatus, &s.RefundStatus, &s.CreatedAt); err != nil {
 			return nil, err
 		}
 		sales = append(sales, s)
@@ -141,7 +161,7 @@ func (r *SaleRepo) ListBranch(ctx context.Context, actor domain.User, branchID *
 		return nil, errors.New("employee cannot view branch sales")
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT s.id, s.receipt_number, s.branch_id, s.employee_id, s.subtotal, s.discount, s.tax, s.total, s.payment_status, s.created_at
+		SELECT s.id, s.receipt_number, s.branch_id, s.employee_id, s.subtotal, s.discount, s.tax, s.total, s.payment_status, `+saleRefundStatusSQL+`, s.created_at
 		FROM sales s
 		WHERE s.deleted_at IS NULL
 			AND ($1::uuid IS NULL OR s.branch_id=$1)
@@ -161,7 +181,7 @@ func (r *SaleRepo) ListBranch(ctx context.Context, actor domain.User, branchID *
 	sales := make([]domain.Sale, 0)
 	for rows.Next() {
 		var s domain.Sale
-		if err := rows.Scan(&s.ID, &s.ReceiptNumber, &s.BranchID, &s.EmployeeID, &s.Subtotal, &s.Discount, &s.Tax, &s.Total, &s.PaymentStatus, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.ReceiptNumber, &s.BranchID, &s.EmployeeID, &s.Subtotal, &s.Discount, &s.Tax, &s.Total, &s.PaymentStatus, &s.RefundStatus, &s.CreatedAt); err != nil {
 			return nil, err
 		}
 		sales = append(sales, s)
@@ -173,7 +193,7 @@ func (r *SaleRepo) FindDetail(ctx context.Context, actor domain.User, saleID uui
 	var detail domain.SaleDetail
 	err := r.db.QueryRow(ctx, `
 		SELECT s.id, s.receipt_number, s.branch_id, s.employee_id, s.subtotal, s.discount, s.tax, s.total,
-			s.payment_status, s.created_at, b.code, b.name, u.name
+			s.payment_status, `+saleRefundStatusSQL+`, s.created_at, b.code, b.name, u.name
 		FROM sales s
 		JOIN branches b ON b.id=s.branch_id
 		JOIN users u ON u.id=s.employee_id
@@ -188,7 +208,7 @@ func (r *SaleRepo) FindDetail(ctx context.Context, actor domain.User, saleID uui
 			)`,
 		saleID, actor.Role, actor.BranchID, actor.ID).
 		Scan(&detail.ID, &detail.ReceiptNumber, &detail.BranchID, &detail.EmployeeID, &detail.Subtotal, &detail.Discount,
-			&detail.Tax, &detail.Total, &detail.PaymentStatus, &detail.CreatedAt, &detail.BranchCode, &detail.BranchName, &detail.EmployeeName)
+			&detail.Tax, &detail.Total, &detail.PaymentStatus, &detail.RefundStatus, &detail.CreatedAt, &detail.BranchCode, &detail.BranchName, &detail.EmployeeName)
 	if err != nil {
 		return nil, err
 	}
@@ -212,12 +232,17 @@ func isBranchStaff(actor domain.User) bool {
 
 func (r *SaleRepo) saleItems(ctx context.Context, saleID uuid.UUID) ([]domain.SaleItemDetail, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT si.id, si.product_id, p.sku, p.barcode, p.name, si.quantity, si.original_price, si.final_price,
-			si.discount_amount, si.discount_reason, si.quantity * si.final_price
+		SELECT si.id, si.product_id, p.sku, p.barcode, p.name, si.quantity,
+			COALESCE((
+				SELECT SUM(im.quantity)
+				FROM inventory_movements im
+				WHERE im.reference_id=$3 AND im.product_id=si.product_id AND im.movement_type=$2 AND im.deleted_at IS NULL
+			), 0),
+			si.original_price, si.final_price, si.discount_amount, si.discount_reason, si.quantity * si.final_price
 		FROM sale_items si
 		JOIN products p ON p.id=si.product_id
 		WHERE si.sale_id=$1 AND si.deleted_at IS NULL
-		ORDER BY si.created_at, si.id`, saleID)
+		ORDER BY si.created_at, si.id`, saleID, domain.MovementReturn, saleID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +251,7 @@ func (r *SaleRepo) saleItems(ctx context.Context, saleID uuid.UUID) ([]domain.Sa
 	var items []domain.SaleItemDetail
 	for rows.Next() {
 		var item domain.SaleItemDetail
-		if err := rows.Scan(&item.ID, &item.ProductID, &item.SKU, &item.Barcode, &item.ProductName, &item.Quantity,
+		if err := rows.Scan(&item.ID, &item.ProductID, &item.SKU, &item.Barcode, &item.ProductName, &item.Quantity, &item.ReturnedQty,
 			&item.OriginalPrice, &item.FinalPrice, &item.DiscountAmount, &item.DiscountReason, &item.LineTotal); err != nil {
 			return nil, err
 		}
@@ -268,11 +293,43 @@ func (r *SaleRepo) Refund(ctx context.Context, actor domain.User, saleID uuid.UU
 	if err := tx.QueryRow(ctx, `SELECT branch_id FROM sales WHERE id=$1 AND deleted_at IS NULL`, saleID).Scan(&branchID); err != nil {
 		return err
 	}
-	if isBranchStaff(actor) && (actor.BranchID == nil || *actor.BranchID != branchID) {
-		return errors.New("staff cannot refund outside assigned branch")
+	if actor.Role == domain.RoleEmployee && (actor.BranchID == nil || *actor.BranchID != branchID) {
+		return errors.New("employee cannot refund outside assigned branch")
+	}
+	if actor.Role == domain.RoleManager {
+		var canAccess bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM user_branches WHERE user_id=$1 AND branch_id=$2)`, actor.ID, branchID).Scan(&canAccess); err != nil {
+			return err
+		}
+		if !canAccess {
+			return errors.New("manager cannot refund outside managed branches")
+		}
 	}
 
 	for _, item := range items {
+		if item.Quantity <= 0 {
+			return errors.New("refund quantity must be greater than zero")
+		}
+		var soldQty, returnedQty int64
+		if err := tx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(quantity), 0)
+			FROM sale_items
+			WHERE sale_id=$1 AND product_id=$2 AND deleted_at IS NULL`, saleID, item.ProductID).Scan(&soldQty); err != nil {
+			return err
+		}
+		if soldQty == 0 {
+			return errors.New("refund item is not part of this sale")
+		}
+		if err := tx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(quantity), 0)
+			FROM inventory_movements
+			WHERE reference_id=$1 AND product_id=$2 AND movement_type=$3 AND deleted_at IS NULL`,
+			saleID.String(), item.ProductID, domain.MovementReturn).Scan(&returnedQty); err != nil {
+			return err
+		}
+		if item.Quantity > soldQty-returnedQty {
+			return errors.New("refund quantity exceeds remaining refundable quantity")
+		}
 		_, err = tx.Exec(ctx, `UPDATE inventories SET quantity=quantity+$3, updated_at=now() WHERE branch_id=$1 AND product_id=$2`,
 			branchID, item.ProductID, item.Quantity)
 		if err != nil {

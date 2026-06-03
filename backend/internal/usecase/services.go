@@ -22,6 +22,7 @@ type Services struct {
 	Users     *UserService
 	Dashboard *DashboardService
 	System    *SystemService
+	Audit     *AuditService
 }
 
 func NewServices(repos repository.Repositories, cfg config.Config) *Services {
@@ -33,6 +34,7 @@ func NewServices(repos repository.Repositories, cfg config.Config) *Services {
 		Users:     &UserService{repo: repos.Users()},
 		Dashboard: &DashboardService{repo: repos.Dashboard()},
 		System:    &SystemService{repo: repos.System()},
+		Audit:     &AuditService{repo: repos.Audit()},
 	}
 }
 
@@ -134,6 +136,9 @@ func (s *InventoryService) AllStock(ctx context.Context, query string) ([]domain
 func (s *InventoryService) Adjust(ctx context.Context, branchID, productID, actorID uuid.UUID, delta int64, reason string) error {
 	return s.repo.Adjust(ctx, branchID, productID, actorID, delta, reason)
 }
+func (s *InventoryService) SetReorderThreshold(ctx context.Context, branchID, productID uuid.UUID, threshold int64) error {
+	return s.repo.SetReorderThreshold(ctx, branchID, productID, threshold)
+}
 func (s *InventoryService) Transfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) error {
 	return s.repo.Transfer(ctx, fromBranchID, toBranchID, productID, actorID, quantity)
 }
@@ -212,4 +217,12 @@ func (s *SystemService) CreateBranch(ctx context.Context, branch domain.Branch) 
 }
 func (s *SystemService) UpdateBranch(ctx context.Context, id uuid.UUID, branch domain.Branch) (*domain.Branch, error) {
 	return s.repo.UpdateBranch(ctx, id, branch)
+}
+
+type AuditService struct {
+	repo repository.AuditRepository
+}
+
+func (s *AuditService) List(ctx context.Context, action, entityType, query string, limit int) ([]domain.AuditLog, error) {
+	return s.repo.List(ctx, action, entityType, query, limit)
 }

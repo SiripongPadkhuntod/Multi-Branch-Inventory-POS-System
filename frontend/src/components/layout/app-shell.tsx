@@ -9,7 +9,7 @@ import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { useI18nStore } from "@/stores/i18n-store";
 import type { TranslationKey } from "@/i18n/translations";
-import { ArrowRightLeft, BarChart3, Boxes, ClipboardList, ClipboardPlus, LayoutDashboard, LogOut, Menu, Package, Receipt, Settings, ShoppingCart, Users, X, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, BarChart3, Boxes, ClipboardList, ClipboardPlus, FileClock, LayoutDashboard, LogOut, Menu, Package, Receipt, Settings, ShoppingCart, Users, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -31,6 +31,7 @@ const ownerLinks: NavLink[] = [
   { href: "/transfers", labelKey: "nav.transfers", icon: Receipt },
   { href: "/employees", labelKey: "nav.employees", icon: Users },
   { href: "/reports", labelKey: "nav.reports", icon: BarChart3 },
+  { href: "/audit-logs", labelKey: "nav.auditLogs", icon: FileClock },
   { href: "/settings", labelKey: "nav.settings", icon: Settings }
 ];
 

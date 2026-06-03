@@ -15,7 +15,7 @@ type InventoryRepo struct{ db *pgxpool.Pool }
 
 func (r *InventoryRepo) List(ctx context.Context, branchID *uuid.UUID, categoryID *uuid.UUID, query string) ([]domain.Inventory, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.branch_id, i.product_id, i.quantity, i.reserved_quantity, i.updated_at
+		SELECT i.id, i.branch_id, i.product_id, i.quantity, i.reserved_quantity, i.reorder_threshold, i.updated_at
 		FROM inventories i
 		JOIN products p ON p.id=i.product_id
 		WHERE i.deleted_at IS NULL
@@ -31,7 +31,7 @@ func (r *InventoryRepo) List(ctx context.Context, branchID *uuid.UUID, categoryI
 	inventories := make([]domain.Inventory, 0)
 	for rows.Next() {
 		var i domain.Inventory
-		if err := rows.Scan(&i.ID, &i.BranchID, &i.ProductID, &i.Quantity, &i.ReservedQuantity, &i.UpdatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.BranchID, &i.ProductID, &i.Quantity, &i.ReservedQuantity, &i.ReorderThreshold, &i.UpdatedAt); err != nil {
 			return nil, err
 		}
 		inventories = append(inventories, i)
@@ -76,7 +76,8 @@ func (r *InventoryRepo) ListMovements(ctx context.Context, branchID *uuid.UUID, 
 func (r *InventoryRepo) AllStock(ctx context.Context, query string) ([]domain.ProductStockSummary, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT p.id, p.sku, p.barcode, p.image_url, p.name, i.branch_id, b.code, b.name,
-			COALESCE(i.quantity, 0), COALESCE(i.reserved_quantity, 0), COALESCE(i.updated_at, p.updated_at)
+			COALESCE(i.quantity, 0), COALESCE(i.reserved_quantity, 0), COALESCE(i.reorder_threshold, 10),
+			COALESCE(i.updated_at, p.updated_at)
 		FROM products p
 		JOIN branches b ON b.deleted_at IS NULL
 		LEFT JOIN inventories i ON i.product_id=p.id AND i.branch_id=b.id AND i.deleted_at IS NULL
@@ -95,7 +96,7 @@ func (r *InventoryRepo) AllStock(ctx context.Context, query string) ([]domain.Pr
 		var item domain.ProductStockSummary
 		var branch domain.BranchStockDetail
 		if err := rows.Scan(&productID, &item.SKU, &item.Barcode, &item.ImageURL, &item.ProductName, &branch.BranchID, &branch.BranchCode,
-			&branch.BranchName, &branch.Quantity, &branch.ReservedQuantity, &branch.UpdatedAt); err != nil {
+			&branch.BranchName, &branch.Quantity, &branch.ReservedQuantity, &branch.ReorderThreshold, &branch.UpdatedAt); err != nil {
 			return nil, err
 		}
 		idx, exists := indexByProduct[productID]
@@ -164,6 +165,19 @@ func (r *InventoryRepo) Adjust(ctx context.Context, branchID, productID, actorID
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *InventoryRepo) SetReorderThreshold(ctx context.Context, branchID, productID uuid.UUID, threshold int64) error {
+	if threshold < 0 {
+		return errors.New("reorder threshold cannot be negative")
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO inventories (branch_id, product_id, quantity, reorder_threshold)
+		VALUES ($1,$2,0,$3)
+		ON CONFLICT (branch_id, product_id)
+		DO UPDATE SET reorder_threshold=$3, deleted_at=NULL, updated_at=now()`,
+		branchID, productID, threshold)
+	return err
 }
 
 func (r *InventoryRepo) Transfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) error {

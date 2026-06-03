@@ -1,6 +1,7 @@
-import type { ApiResponse, Branch, CartItem, Category, DashboardSummary, EmployeeSalesSummary, Inventory, InventoryMovementDetail, PaymentMethod, Product, ProductStockSummary, Role, Sale, SaleDetail, User } from "@/types/domain";
+import type { ApiResponse, AuditLog, Branch, CartItem, Category, DashboardSummary, EmployeeSalesSummary, Inventory, InventoryMovementDetail, PaymentMethod, Product, ProductStockSummary, Role, Sale, SaleDetail, User } from "@/types/domain";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
+export const API_ORIGIN = API_URL.replace(/\/api\/v1\/?$/, "");
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -55,6 +56,26 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload.data;
 }
 
+async function upload<T>(path: string, body: FormData): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body
+  });
+  const payload = (await response.json()) as ApiResponse<T>;
+  if (!response.ok || !payload.success) {
+    if (response.status === 401) {
+      redirectToLogin();
+    }
+    throw new ApiError(payload.message || "Upload failed", response.status);
+  }
+  return payload.data;
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<{ access_token: string; refresh_token: string; user: User }>("/auth/login", {
@@ -76,14 +97,26 @@ export const api = {
   deleteCategory: (id: string) => request<null>(`/categories/${id}`, { method: "DELETE" }),
   dashboardSummary: (branchId?: string) =>
     request<DashboardSummary>(`/dashboard/summary${branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ""}`),
+  auditLogs: (input: { q?: string; action?: string; entity_type?: string; limit?: number } = {}) =>
+    request<AuditLog[]>(`/audit-logs?${new URLSearchParams({
+      ...(input.q ? { q: input.q } : {}),
+      ...(input.action ? { action: input.action } : {}),
+      ...(input.entity_type ? { entity_type: input.entity_type } : {}),
+      limit: String(input.limit ?? 150)
+    }).toString()}`),
   users: () => request<User[]>("/users"),
   employeeSalesSummary: () => request<EmployeeSalesSummary[]>("/users/sales-summary"),
-  createUser: (input: { name: string; email: string; password: string; role: Role; branch_id: string; status: string }) =>
+  createUser: (input: { name: string; email: string; password: string; role: Role; branch_id: string; branch_ids?: string[]; status: string }) =>
     request<User>("/users", { method: "POST", body: JSON.stringify(input) }),
-  updateUser: (id: string, input: { name: string; email: string; role: Role; branch_id: string; status: string }) =>
+  updateUser: (id: string, input: { name: string; email: string; role: Role; branch_id: string; branch_ids?: string[]; status: string }) =>
     request<User>(`/users/${id}`, { method: "PUT", body: JSON.stringify(input) }),
   products: (q = "") => request<Product[]>(`/products?q=${encodeURIComponent(q)}`),
   productByBarcode: (barcode: string) => request<Product>(`/products/barcode/${encodeURIComponent(barcode)}`),
+  uploadProductImage: (file: File) => {
+    const data = new FormData();
+    data.append("image", file);
+    return upload<{ image_url: string }>("/products/upload-image", data);
+  },
   createProduct: (input: Omit<Product, "id">) => request<Product>("/products", { method: "POST", body: JSON.stringify(input) }),
   updateProduct: (id: string, input: Omit<Product, "id">) => request<Product>(`/products/${id}`, { method: "PUT", body: JSON.stringify(input) }),
   deleteProduct: (id: string) => request<null>(`/products/${id}`, { method: "DELETE" }),
@@ -114,6 +147,15 @@ export const api = {
         reason
       })
     }),
+  setReorderThreshold: (branchId: string, productId: string, reorderThreshold: number) =>
+    request<null>("/inventories/reorder-threshold", {
+      method: "POST",
+      body: JSON.stringify({
+        branch_id: branchId,
+        product_id: productId,
+        reorder_threshold: reorderThreshold
+      })
+    }),
   transferStock: (fromBranchId: string, toBranchId: string, productId: string, quantity: number) =>
     request<null>("/inventories/transfer", {
       method: "POST",
@@ -128,6 +170,14 @@ export const api = {
     request<Sale[]>(`/sales${dateFrom || dateTo ? `?${new URLSearchParams({ ...(dateFrom ? { date_from: dateFrom } : {}), ...(dateTo ? { date_to: dateTo } : {}) }).toString()}` : ""}`),
   branchSales: (branchId?: string) => request<Sale[]>(`/sales/branch${branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ""}`),
   saleDetail: (id: string) => request<SaleDetail>(`/sales/${id}`),
+  refundSale: (saleId: string, items: { product_id: string; quantity: number }[]) =>
+    request<null>("/sales/refund", {
+      method: "POST",
+      body: JSON.stringify({
+        sale_id: saleId,
+        items
+      })
+    }),
   createSale: (branchId: string, items: CartItem[], method: PaymentMethod, discount: number, tax: number) => {
     const subtotal = items.reduce((sum, item) => sum + item.final_price * item.quantity, 0);
     const total = Math.max(0, subtotal - discount + tax);

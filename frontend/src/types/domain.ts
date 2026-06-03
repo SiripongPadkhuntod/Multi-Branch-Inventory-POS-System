@@ -10,10 +10,25 @@ export type ApiResponse<T> = {
 export type User = {
   id: string;
   branch_id: string | null;
+  branch_ids?: string[];
   role: Role;
   name: string;
   email: string;
   status: string;
+};
+
+export type AuditLog = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  old_data: string;
+  new_data: string;
+  ip_address: string;
+  created_at: string;
 };
 
 export type Branch = {
@@ -52,6 +67,7 @@ export type Inventory = {
   product_id: string;
   quantity: number;
   reserved_quantity: number;
+  reorder_threshold: number;
   updated_at: string;
 };
 
@@ -80,6 +96,7 @@ export type BranchStockDetail = {
   branch_name: string;
   quantity: number;
   reserved_quantity: number;
+  reorder_threshold: number;
   updated_at: string;
 };
 
@@ -104,6 +121,7 @@ export type Sale = {
   tax: number;
   total: number;
   payment_status: string;
+  refund_status: "NONE" | "PARTIAL_REFUND" | "REFUNDED";
   created_at: string;
 };
 
@@ -114,6 +132,7 @@ export type SaleItemDetail = {
   barcode: string;
   product_name: string;
   quantity: number;
+  returned_quantity: number;
   original_price: number;
   final_price: number;
   discount_amount: number;
@@ -148,6 +167,7 @@ export type LowStockItem = {
   product_id: string;
   product_name: string;
   quantity: number;
+  reorder_threshold: number;
 };
 
 export type BranchSalesSummary = {

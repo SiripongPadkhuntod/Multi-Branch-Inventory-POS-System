@@ -9,7 +9,7 @@ import { ListSkeleton } from "@/components/ui/skeleton";
 import { api } from "@/services/api";
 import { useToastStore } from "@/stores/toast-store";
 import type { Category, Product } from "@/types/domain";
-import { Edit3, PackagePlus, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { Edit3, ImagePlus, PackagePlus, Plus, Save, Search, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 const money = (value: number) => `฿${(value / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
@@ -50,6 +50,7 @@ export default function ProductsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [confirmUpdateOpen, setConfirmUpdateOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const toast = useToastStore((state) => state.show);
@@ -157,6 +158,32 @@ export default function ProductsPage() {
     }
   }
 
+  async function uploadImage(file?: File) {
+    if (!file) {
+      return;
+    }
+    setError("");
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Product image must be 5MB or smaller");
+      return;
+    }
+    try {
+      setUploadingImage(true);
+      const result = await api.uploadProductImage(file);
+      setForm((value) => ({ ...value, image_url: result.image_url }));
+      toast({ type: "success", title: "Image uploaded", message: file.name });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Image upload failed");
+      toast({ type: "error", title: "Image upload failed", message: err instanceof Error ? err.message : "Please try again" });
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
   async function remove() {
     if (!form.id) return;
     setNotice("");
@@ -259,7 +286,40 @@ export default function ProductsPage() {
               </label>
               <label className="block text-sm font-semibold">Cost Price<Input className="mt-1" type="number" min={0} value={form.cost_price} onChange={(event) => setForm({ ...form, cost_price: Number(event.target.value) })} /></label>
               <label className="block text-sm font-semibold">Sell Price<Input className="mt-1" type="number" min={0} value={form.sell_price} onChange={(event) => setForm({ ...form, sell_price: Number(event.target.value) })} /></label>
-              <label className="block text-sm font-semibold sm:col-span-2">Image URL<Input className="mt-1" value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} /></label>
+              <div className="grid gap-3 rounded-md border border-line bg-field p-3 sm:col-span-2 sm:grid-cols-[96px_1fr]">
+                <ProductImage src={form.image_url} name={form.name || "Product image"} className="h-24 w-24" />
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <ImagePlus className="h-4 w-4 text-brand" />
+                      Product Image
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Upload JPG, PNG, WEBP, or GIF from your computer. Maximum 5MB.</p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-slate-800 px-4 text-sm font-semibold text-white hover:bg-slate-700">
+                      <Upload className="h-4 w-4" />
+                      {uploadingImage ? "Uploading..." : "Upload Image"}
+                      <input
+                        className="sr-only"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        disabled={uploadingImage}
+                        onChange={(event) => uploadImage(event.target.files?.[0])}
+                      />
+                    </label>
+                    {form.image_url ? (
+                      <Button className="!bg-white !text-slate-700 ring-1 ring-line hover:!bg-white" onClick={() => setForm({ ...form, image_url: "" })}>
+                        Remove Image
+                      </Button>
+                    ) : null}
+                  </div>
+                  <label className="block text-xs font-semibold text-slate-500">
+                    Image path or URL
+                    <Input className="mt-1" value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} />
+                  </label>
+                </div>
+              </div>
               <label className="block text-sm font-semibold sm:col-span-2">Description<Input className="mt-1" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
               <label className="block text-sm font-semibold sm:col-span-2">Status
                 <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>

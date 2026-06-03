@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth-store";
 import type { Branch, EmployeeSalesSummary, Role, User } from "@/types/domain";
-import { BarChart3, Pencil, Save, UserPlus, X } from "lucide-react";
+import { BarChart3, Check, Pencil, Save, UserPlus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 const money = (value: number) => `฿${(value / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
@@ -18,6 +18,7 @@ type FormState = {
   password: string;
   role: Role;
   branch_id: string;
+  branch_ids: string[];
   status: string;
 };
 
@@ -28,6 +29,7 @@ const emptyForm: FormState = {
   password: "password123",
   role: "EMPLOYEE",
   branch_id: "",
+  branch_ids: [],
   status: "ACTIVE"
 };
 
@@ -52,7 +54,8 @@ export default function EmployeesPage() {
       setSales(Array.isArray(salesData) ? salesData : []);
       setForm((value) => ({
         ...value,
-        branch_id: value.branch_id || branchData[0]?.id || ""
+        branch_id: value.branch_id || branchData[0]?.id || "",
+        branch_ids: value.branch_ids.length > 0 ? value.branch_ids : branchData[0]?.id ? [branchData[0].id] : []
       }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cannot load employees");
@@ -66,7 +69,8 @@ export default function EmployeesPage() {
   function createEmployee() {
     setNotice("");
     setError("");
-    setForm({ ...emptyForm, branch_id: branches[0]?.id ?? "" });
+    const firstBranch = branches[0]?.id ?? "";
+    setForm({ ...emptyForm, branch_id: firstBranch, branch_ids: firstBranch ? [firstBranch] : [] });
     setFormOpen(true);
   }
 
@@ -80,6 +84,7 @@ export default function EmployeesPage() {
       password: "",
       role: user.role,
       branch_id: user.branch_id ?? "",
+      branch_ids: user.branch_ids?.length ? user.branch_ids : user.branch_id ? [user.branch_id] : [],
       status: user.status
     });
     setFormOpen(true);
@@ -87,13 +92,49 @@ export default function EmployeesPage() {
 
   function closeForm() {
     setFormOpen(false);
-    setForm({ ...emptyForm, branch_id: branches[0]?.id ?? "" });
+    const firstBranch = branches[0]?.id ?? "";
+    setForm({ ...emptyForm, branch_id: firstBranch, branch_ids: firstBranch ? [firstBranch] : [] });
+  }
+
+  function setRole(role: Role) {
+    const firstBranch = form.branch_id || form.branch_ids[0] || branches[0]?.id || "";
+    setForm({
+      ...form,
+      role,
+      branch_id: firstBranch,
+      branch_ids: role === "MANAGER" ? (form.branch_ids.length > 0 ? form.branch_ids : firstBranch ? [firstBranch] : []) : firstBranch ? [firstBranch] : []
+    });
+  }
+
+  function toggleManagerBranch(branchId: string) {
+    const selected = form.branch_ids.includes(branchId)
+      ? form.branch_ids.filter((id) => id !== branchId)
+      : [...form.branch_ids, branchId];
+    setForm({
+      ...form,
+      branch_ids: selected,
+      branch_id: selected[0] ?? ""
+    });
+  }
+
+  function branchLabel(user: User) {
+    const branchIds = user.branch_ids?.length ? user.branch_ids : user.branch_id ? [user.branch_id] : [];
+    if (branchIds.length === 0) {
+      return "No branch";
+    }
+    const codes = branchIds.map((id) => branchMap.get(id)?.code).filter(Boolean);
+    if (codes.length === 0) {
+      return "No branch";
+    }
+    return user.role === "MANAGER" && codes.length > 1 ? `${codes.slice(0, 2).join(", ")}${codes.length > 2 ? ` +${codes.length - 2}` : ""}` : codes[0];
   }
 
   async function save() {
     setNotice("");
     setError("");
-    if (!form.name || !form.email || !form.branch_id) {
+    const branchIds = form.role === "MANAGER" ? form.branch_ids : form.branch_id ? [form.branch_id] : [];
+    const primaryBranch = branchIds[0] ?? form.branch_id;
+    if (!form.name || !form.email || !primaryBranch) {
       setError("Name, email, and branch are required");
       return;
     }
@@ -107,7 +148,8 @@ export default function EmployeesPage() {
           name: form.name,
           email: form.email,
           role: form.role,
-          branch_id: form.branch_id,
+          branch_id: primaryBranch,
+          branch_ids: branchIds,
           status: form.status
         });
         setNotice("Employee updated");
@@ -117,7 +159,8 @@ export default function EmployeesPage() {
           email: form.email,
           password: form.password,
           role: form.role,
-          branch_id: form.branch_id,
+          branch_id: primaryBranch,
+          branch_ids: branchIds,
           status: form.status
         });
         setNotice("Employee created");
@@ -155,7 +198,7 @@ export default function EmployeesPage() {
                 <div>
                   <div className="font-semibold">{user.name}</div>
                   <div className="text-xs text-slate-500">{user.email}</div>
-                  <div className="mt-1 text-xs text-slate-500">{branchMap.get(user.branch_id ?? "")?.code ?? "No branch"} · {user.role}</div>
+                  <div className="mt-1 text-xs text-slate-500">{branchLabel(user)} · {user.role}</div>
                 </div>
                 <div className="flex items-center gap-3 text-right text-sm">
                   <div>
@@ -191,7 +234,7 @@ export default function EmployeesPage() {
       </div>
       {formOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 px-4 py-6 backdrop-blur-sm">
-          <div className="max-h-[calc(100vh-48px)] w-full max-w-xl overflow-y-auto rounded-md border border-line bg-white p-5 shadow-2xl">
+          <div className="max-h-[calc(100vh-48px)] w-full max-w-2xl overflow-y-auto rounded-md border border-line bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <h2 className="flex items-center gap-2 text-lg font-bold">
@@ -226,20 +269,51 @@ export default function EmployeesPage() {
                 </label>
               ) : null}
               <label className="block text-sm font-semibold">
-                Branch
-                <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.branch_id} onChange={(event) => setForm({ ...form, branch_id: event.target.value })}>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm font-semibold">
                 Role
-                <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as Role })}>
+                <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.role} onChange={(event) => setRole(event.target.value as Role)}>
                   <option value="EMPLOYEE">Employee</option>
                   {currentUser?.role === "OWNER" ? <option value="MANAGER">Manager</option> : null}
                 </select>
               </label>
+              {form.role === "MANAGER" && currentUser?.role === "OWNER" ? (
+                <div className="sm:col-span-2">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold">Managed Branches</div>
+                    <div className="text-xs text-slate-500">{form.branch_ids.length} selected</div>
+                  </div>
+                  <div className="grid max-h-52 gap-2 overflow-y-auto rounded-md border border-line bg-field p-2 sm:grid-cols-2">
+                    {branches.map((branch) => {
+                      const selected = form.branch_ids.includes(branch.id);
+                      return (
+                        <button
+                          key={branch.id}
+                          type="button"
+                          className={selected ? "flex items-center gap-2 rounded-md border border-brand bg-brandSoft p-3 text-left text-sm" : "flex items-center gap-2 rounded-md border border-line bg-white p-3 text-left text-sm hover:bg-field"}
+                          onClick={() => toggleManagerBranch(branch.id)}
+                        >
+                          <span className={selected ? "grid h-5 w-5 shrink-0 place-items-center rounded border border-brand bg-brand text-white" : "h-5 w-5 shrink-0 rounded border border-line bg-white"}>
+                            {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold">{branch.code}</span>
+                            <span className="block truncate text-xs text-slate-500">{branch.name}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">Managers can view dashboard, stock, employees, and branch sales only for selected branches.</p>
+                </div>
+              ) : (
+                <label className="block text-sm font-semibold">
+                  Branch
+                  <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.branch_id} onChange={(event) => setForm({ ...form, branch_id: event.target.value, branch_ids: event.target.value ? [event.target.value] : [] })}>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="block text-sm font-semibold sm:col-span-2">
                 Status
                 <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>

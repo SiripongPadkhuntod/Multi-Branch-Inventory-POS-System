@@ -27,6 +27,8 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+    volumes:
+      - uploads_data:/app/uploads
 
   frontend:
     build:
@@ -50,3 +52,4 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:

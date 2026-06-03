@@ -1,9 +1,13 @@
 "use client";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { RefundModal } from "@/components/sales/refund-modal";
+import { printReceipt, ReceiptModal } from "@/components/sales/receipt-modal";
+import { canRefundSale, SaleStatus } from "@/components/sales/sale-status";
+import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
 import type { Branch, DashboardSummary, EmployeeSalesSummary, Sale, SaleDetail } from "@/types/domain";
-import { BarChart3, ChevronDown, ChevronUp, Package, ReceiptText, Users } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronUp, Eye, Package, Printer, ReceiptText, RotateCcw, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 const money = (value: number) => `฿${(value / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
@@ -26,6 +30,9 @@ export default function ReportsPage() {
   const [employeeSales, setEmployeeSales] = useState<EmployeeSalesSummary[]>([]);
   const [selectedSaleId, setSelectedSaleId] = useState("");
   const [detail, setDetail] = useState<SaleDetail | null>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refunding, setRefunding] = useState(false);
   const [error, setError] = useState("");
 
   const selectedBranch = useMemo(() => branches.find((branch) => branch.id === branchId), [branches, branchId]);
@@ -40,6 +47,8 @@ export default function ReportsPage() {
     setError("");
     setSelectedSaleId("");
     setDetail(null);
+    setReceiptOpen(false);
+    setRefundOpen(false);
     Promise.all([api.dashboardSummary(branchId || undefined), api.branchSales(branchId || undefined), api.employeeSalesSummary()])
       .then(([summaryData, salesData, employeeData]) => {
         setSummary(summaryData ?? emptySummary);
@@ -53,6 +62,8 @@ export default function ReportsPage() {
     if (selectedSaleId === sale.id) {
       setSelectedSaleId("");
       setDetail(null);
+      setReceiptOpen(false);
+      setRefundOpen(false);
       return;
     }
     setSelectedSaleId(sale.id);
@@ -61,6 +72,25 @@ export default function ReportsPage() {
       setDetail(await api.saleDetail(sale.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cannot load receipt detail");
+    }
+  }
+
+  async function refund(items: { product_id: string; quantity: number }[]) {
+    if (!detail) return;
+    setError("");
+    setRefunding(true);
+    try {
+      await api.refundSale(detail.id, items);
+      setRefundOpen(false);
+      setDetail(await api.saleDetail(detail.id));
+      const [summaryData, salesData, employeeData] = await Promise.all([api.dashboardSummary(branchId || undefined), api.branchSales(branchId || undefined), api.employeeSalesSummary()]);
+      setSummary(summaryData ?? emptySummary);
+      setSales(Array.isArray(salesData) ? salesData : []);
+      setEmployeeSales(Array.isArray(employeeData) ? employeeData : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Refund failed");
+    } finally {
+      setRefunding(false);
     }
   }
 
@@ -114,7 +144,7 @@ export default function ReportsPage() {
             {summary.low_stock.map((item) => (
               <div key={`${item.branch_id}-${item.product_id}`} className="flex justify-between gap-3 rounded-md bg-field p-3 text-sm">
                 <span className="font-medium">{item.branch_code} · {item.product_name}</span>
-                <span>{item.quantity}</span>
+                <span>{item.quantity} / {item.reorder_threshold}</span>
               </div>
             ))}
           </div>
@@ -147,7 +177,7 @@ export default function ReportsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-4 text-right">
-                <div><div className="font-bold">{money(sale.total)}</div><div className="text-xs text-emerald-700">{sale.payment_status}</div></div>
+                <div><div className="font-bold">{money(sale.total)}</div><SaleStatus sale={sale} /></div>
                 {selectedSaleId === sale.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </div>
             </button>
@@ -167,11 +197,29 @@ export default function ReportsPage() {
                     </div>
                   ))}
                 </div>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <Button className="bg-slate-800 hover:bg-slate-700" onClick={() => setReceiptOpen(true)}>
+                    <Eye className="h-4 w-4" />
+                    View Receipt
+                  </Button>
+                  <Button onClick={() => printReceipt(detail)}>
+                    <Printer className="h-4 w-4" />
+                    Print Receipt
+                  </Button>
+                  {canRefundSale(detail) ? (
+                    <Button className="bg-red-600 hover:bg-red-700" onClick={() => setRefundOpen(true)}>
+                      <RotateCcw className="h-4 w-4" />
+                      Refund / Return
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>
         ))}
       </section>
+      <ReceiptModal open={receiptOpen} detail={detail} onClose={() => setReceiptOpen(false)} />
+      <RefundModal open={refundOpen} detail={detail} loading={refunding} onClose={() => setRefundOpen(false)} onConfirm={refund} />
     </AppShell>
   );
 }

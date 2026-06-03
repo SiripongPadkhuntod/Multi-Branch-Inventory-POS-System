@@ -33,7 +33,11 @@ func (r *DashboardRepo) AccessibleBranches(ctx context.Context, actor domain.Use
 			FROM branches b
 			JOIN user_branches ub ON ub.branch_id=b.id
 			WHERE ub.user_id=$1 AND b.deleted_at IS NULL
-			ORDER BY b.code`, actor.ID)
+			UNION
+			SELECT id, code, name, address, phone, status, created_at
+			FROM branches
+			WHERE id=$2 AND $2::uuid IS NOT NULL AND deleted_at IS NULL
+			ORDER BY code`, actor.ID, actor.BranchID)
 	}
 	if err != nil {
 		return nil, err
@@ -138,14 +142,14 @@ func containsBranch(branches []uuid.UUID, branchID uuid.UUID) bool {
 
 func (r *DashboardRepo) lowStock(ctx context.Context, branchID *uuid.UUID, allowedIDs []uuid.UUID) ([]domain.LowStockItem, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT i.branch_id, b.code, i.product_id, p.name, i.quantity
+		SELECT i.branch_id, b.code, i.product_id, p.name, i.quantity, i.reorder_threshold
 		FROM inventories i
 		JOIN branches b ON b.id=i.branch_id
 		JOIN products p ON p.id=i.product_id
-		WHERE i.deleted_at IS NULL AND i.quantity <= 10
+		WHERE i.deleted_at IS NULL AND i.quantity <= i.reorder_threshold
 			AND ($1::uuid IS NULL OR i.branch_id=$1)
 			AND ($2::uuid[] IS NULL OR i.branch_id=ANY($2))
-		ORDER BY i.quantity, p.name
+		ORDER BY (i.reorder_threshold - i.quantity) DESC, i.quantity, p.name
 		LIMIT 20`, branchID, allowedIDs)
 	if err != nil {
 		return nil, err
@@ -154,7 +158,7 @@ func (r *DashboardRepo) lowStock(ctx context.Context, branchID *uuid.UUID, allow
 	items := make([]domain.LowStockItem, 0)
 	for rows.Next() {
 		var item domain.LowStockItem
-		if err := rows.Scan(&item.BranchID, &item.BranchCode, &item.ProductID, &item.ProductName, &item.Quantity); err != nil {
+		if err := rows.Scan(&item.BranchID, &item.BranchCode, &item.ProductID, &item.ProductName, &item.Quantity, &item.ReorderThreshold); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

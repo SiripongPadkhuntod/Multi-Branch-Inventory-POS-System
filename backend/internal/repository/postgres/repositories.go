@@ -15,6 +15,7 @@ type Repositories struct {
 	users       *UserRepo
 	dashboard   *DashboardRepo
 	system      *SystemRepo
+	audit       *AuditRepo
 }
 
 func NewRepositories(db *pgxpool.Pool) *Repositories {
@@ -26,6 +27,7 @@ func NewRepositories(db *pgxpool.Pool) *Repositories {
 	r.users = &UserRepo{db: db}
 	r.dashboard = &DashboardRepo{db: db}
 	r.system = &SystemRepo{db: db}
+	r.audit = &AuditRepo{db: db}
 	return r
 }
 
@@ -36,3 +38,4 @@ func (r *Repositories) Sales() repository.SaleRepository            { return r.s
 func (r *Repositories) Users() repository.UserRepository            { return r.users }
 func (r *Repositories) Dashboard() repository.DashboardRepository   { return r.dashboard }
 func (r *Repositories) System() repository.SystemRepository         { return r.system }
+func (r *Repositories) Audit() repository.AuditRepository           { return r.audit }

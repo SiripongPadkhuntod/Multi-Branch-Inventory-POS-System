@@ -17,6 +17,7 @@ type Repositories interface {
 	Users() UserRepository
 	Dashboard() DashboardRepository
 	System() SystemRepository
+	Audit() AuditRepository
 }
 
 type AuthRepository interface {
@@ -38,6 +39,7 @@ type InventoryRepository interface {
 	ListMovements(ctx context.Context, branchID *uuid.UUID, query string, limit int) ([]domain.InventoryMovementDetail, error)
 	AllStock(ctx context.Context, query string) ([]domain.ProductStockSummary, error)
 	Adjust(ctx context.Context, branchID, productID, actorID uuid.UUID, quantityDelta int64, reason string) error
+	SetReorderThreshold(ctx context.Context, branchID, productID uuid.UUID, threshold int64) error
 	Transfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) error
 }
 
@@ -68,4 +70,8 @@ type SystemRepository interface {
 	DeleteCategory(ctx context.Context, id uuid.UUID) error
 	CreateBranch(ctx context.Context, branch domain.Branch) (*domain.Branch, error)
 	UpdateBranch(ctx context.Context, id uuid.UUID, branch domain.Branch) (*domain.Branch, error)
+}
+
+type AuditRepository interface {
+	List(ctx context.Context, action, entityType, query string, limit int) ([]domain.AuditLog, error)
 }
