@@ -24,6 +24,12 @@ func main() {
 	}
 	defer db.Close()
 
+	if cfg.RunMigrations {
+		if err := database.RunMigrations(context.Background(), db, cfg.MigrationsPath); err != nil {
+			log.Fatalf("database migrations: %v", err)
+		}
+	}
+
 	repos := postgres.NewRepositories(db)
 	services := usecase.NewServices(repos, cfg)
 	router := httpdelivery.NewRouter(cfg, services)
