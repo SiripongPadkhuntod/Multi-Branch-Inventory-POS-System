@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,7 +15,6 @@ import (
 	"pos-system/backend/internal/delivery/http/middleware"
 	"pos-system/backend/internal/domain"
 	"pos-system/backend/internal/infrastructure/config"
-	"pos-system/backend/internal/infrastructure/storage"
 	"pos-system/backend/internal/usecase"
 
 	"github.com/gin-gonic/gin"
@@ -26,15 +25,15 @@ func NewRouter(cfg config.Config, services *usecase.Services) *gin.Engine {
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	
-	minioStorage, err := storage.NewMinioStorage(cfg)
-	if err != nil {
-		log.Printf("Warning: failed to initialize MinIO storage: %v", err)
-	}
-
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), middleware.CORS())
 	r.Static("/uploads", "./uploads")
+	r.GET("/healthz", func(c *gin.Context) {
+		ok(c, "Healthy", gin.H{
+			"status": "ok",
+			"env":    cfg.AppEnv,
+		})
+	})
 	registerSwagger(r)
 
 	v1 := r.Group("/api/v1")
@@ -42,7 +41,7 @@ func NewRouter(cfg config.Config, services *usecase.Services) *gin.Engine {
 
 	protected := v1.Group("")
 	protected.Use(middleware.Auth(services.Auth))
-	registerProducts(protected, services, minioStorage)
+	registerProducts(protected, services)
 	registerInventories(protected, services)
 	registerSales(protected, services)
 	registerUsers(protected, services)
@@ -88,7 +87,7 @@ func registerAuth(r *gin.RouterGroup, cfg config.Config, services *usecase.Servi
 	})
 }
 
-func registerProducts(r *gin.RouterGroup, services *usecase.Services, storage *storage.MinioStorage) {
+func registerProducts(r *gin.RouterGroup, services *usecase.Services) {
 	r.GET("/products", func(c *gin.Context) {
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
@@ -167,18 +166,17 @@ func registerProducts(r *gin.RouterGroup, services *usecase.Services, storage *s
 			ext = originalExt
 		}
 
-		if storage == nil {
-			fail(c, http.StatusInternalServerError, errors.New("storage service not initialized"))
+		if err := os.MkdirAll("./uploads/products", 0755); err != nil {
+			fail(c, http.StatusInternalServerError, err)
 			return
 		}
-
 		filename := fmt.Sprintf("%s%s", uuid.NewString(), ext)
-		url, err := storage.UploadFile(c.Request.Context(), filename, file, fileHeader.Size, contentType)
-		if err != nil {
-			fail(c, http.StatusInternalServerError, fmt.Errorf("failed to upload image: %w", err))
+		destination := filepath.Join("uploads", "products", filename)
+		if err := c.SaveUploadedFile(fileHeader, destination); err != nil {
+			fail(c, http.StatusInternalServerError, err)
 			return
 		}
-		ok(c, "Image uploaded", gin.H{"image_url": url})
+		ok(c, "Image uploaded", gin.H{"image_url": "/" + filepath.ToSlash(destination)})
 	})
 	owner.POST("", func(c *gin.Context) {
 		var input domain.Product

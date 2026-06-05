@@ -43,13 +43,31 @@ Services:
 
 - Frontend: http://localhost:3000
 - Backend: http://localhost:8080/api/v1
+- Backend health check: http://localhost:8080/healthz
+- Swagger: http://localhost:8080/swagger
 - Nginx: http://localhost
-- PostgreSQL: localhost:5432
+- PostgreSQL: localhost:5433
 
 Seed users:
 
 - Owner: `owner@example.com` / `password123`
 - Employee: `employee@example.com` / `password123`
+
+## Deploy Notes
+
+The backend runs SQL migrations automatically on startup. Existing databases that already have the initial tables are baselined, then newer migrations are applied in order.
+
+Recommended Render backend environment:
+
+```env
+APP_ENV=production
+RUN_MIGRATIONS=true
+MIGRATIONS_PATH=migrations
+DATABASE_URL=<Render PostgreSQL internal database URL>
+JWT_SECRET=<strong secret>
+```
+
+Use `/healthz` as the Render health check path.
 
 ## Implemented Core
 
@@ -62,6 +80,7 @@ Seed users:
 - Movement logs for stock changes and sales
 - Refund inventory restoration endpoint
 - PostgreSQL schema with UUIDs, foreign keys, constraints, indexes, and soft-delete columns
+- Automatic migration runner for Docker and Render deployments
 - Next.js login, owner dashboard, POS screen, employee pages, and owner module pages
 
 ## API Format
@@ -87,7 +106,6 @@ Error:
 
 ## Next Production Steps
 
-- Add a migration runner such as Goose or Atlas instead of init-only Docker SQL.
 - Implement refresh-token persistence/revocation.
 - Add rate limiting middleware backed by Redis.
 - Complete transfer approval/completion usecases.
