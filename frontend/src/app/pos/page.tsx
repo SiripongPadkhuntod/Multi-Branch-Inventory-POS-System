@@ -13,7 +13,7 @@ import { useI18nStore } from "@/stores/i18n-store";
 import { useToastStore } from "@/stores/toast-store";
 import type { PaymentMethod, Product, SaleDetail } from "@/types/domain";
 import { CreditCard, Minus, Plus, Printer, ScanBarcode, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const money = (value: number) => `฿${(value / 100).toLocaleString("th-TH", { minimumFractionDigits: 2 })}`;
 
@@ -35,14 +35,22 @@ export default function POSPage() {
   const total = Math.max(0, subtotal - discount + tax);
   const toast = useToastStore((state) => state.show);
 
+  useEffect(() => {
+    runSearch("");
+  }, []);
+
+  function addToCart(product: Product) {
+    addProduct(product);
+    toast({ type: "success", title: t("pos.addedToCart"), message: product.name });
+  }
+
   async function scan() {
     if (!barcode.trim()) return;
     setError("");
     setNotice("");
     try {
       const product = await api.productByBarcode(barcode.trim());
-      addProduct(product);
-      toast({ type: "success", title: t("pos.addedToCart"), message: product.name });
+      addToCart(product);
       setBarcode("");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("pos.productNotFound"));
@@ -50,11 +58,11 @@ export default function POSPage() {
     }
   }
 
-  async function runSearch() {
+  async function runSearch(query = search) {
     setError("");
     setSearching(true);
     try {
-      const data = await api.products(search);
+      const data = await api.products(query);
       setProducts(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("pos.searchFailed"));
@@ -121,13 +129,20 @@ export default function POSPage() {
               </Button>
             </div>
           </div>
-          <div className="rounded-md border border-line bg-white p-4">
-            <label className="text-sm font-semibold">{t("pos.productSearch")}</label>
+          <div className="rounded-md border border-line bg-white p-4 dark:bg-slate-900">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold">{t("pos.productList")}</h2>
+                <p className="text-sm text-slate-500">{t("pos.productListDescription")}</p>
+              </div>
+              <div className="text-sm font-semibold text-slate-500">{products.length} {t("common.items")}</div>
+            </div>
+            <label className="mt-4 block text-sm font-semibold">{t("pos.productSearch")}</label>
             <div className="mt-2 flex gap-2">
               <Input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => event.key === "Enter" && runSearch()} />
-              <Button onClick={runSearch}>{t("common.search")}</Button>
+              <Button onClick={() => runSearch()}>{t("common.search")}</Button>
             </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2">
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
               {searching ? Array.from({ length: 4 }).map((_, index) => (
                 <div key={index} className="rounded-md border border-line p-3">
                   <div className="flex gap-3">
@@ -139,14 +154,22 @@ export default function POSPage() {
                   </div>
                 </div>
               )) : null}
-              {products.map((product) => (
-                <button key={product.id} onClick={() => { addProduct(product); toast({ type: "success", title: t("pos.addedToCart"), message: product.name }); }} className="rounded-md border border-line bg-white p-3 text-left shadow-sm transition hover:border-brand hover:bg-brandSoft/40">
+              {!searching && products.length === 0 ? (
+                <div className="rounded-md border border-dashed border-line p-5 text-sm text-slate-500 sm:col-span-2 2xl:col-span-3">{t("pos.noProducts")}</div>
+              ) : null}
+              {!searching && products.map((product) => (
+                <button key={product.id} onClick={() => addToCart(product)} className="group rounded-md border border-line bg-white p-3 text-left shadow-sm transition hover:border-brand hover:bg-brandSoft/40 dark:bg-slate-950">
                   <div className="flex gap-3">
                     <ProductImage src={product.image_url} name={product.name} />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="truncate font-semibold">{product.name}</div>
                       <div className="text-xs text-slate-500">{product.sku} · {product.barcode}</div>
-                      <div className="mt-2 text-sm font-bold">{money(product.sell_price)}</div>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold">{money(product.sell_price)}</span>
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-brand text-white transition group-hover:scale-105">
+                          <Plus className="h-4 w-4" />
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </button>
