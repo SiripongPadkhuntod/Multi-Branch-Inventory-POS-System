@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { useI18nStore } from "@/stores/i18n-store";
 import type { Branch, EmployeeSalesSummary, Role, User } from "@/types/domain";
 import { BarChart3, Check, Pencil, Save, UserPlus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -42,6 +43,7 @@ export default function EmployeesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const t = useI18nStore((state) => state.t);
 
   const branchMap = useMemo(() => new Map(branches.map((branch) => [branch.id, branch])), [branches]);
 
@@ -58,7 +60,7 @@ export default function EmployeesPage() {
         branch_ids: value.branch_ids.length > 0 ? value.branch_ids : branchData[0]?.id ? [branchData[0].id] : []
       }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Cannot load employees");
+      setError(err instanceof Error ? err.message : t("employees.loadFailed"));
     }
   }
 
@@ -120,11 +122,11 @@ export default function EmployeesPage() {
   function branchLabel(user: User) {
     const branchIds = user.branch_ids?.length ? user.branch_ids : user.branch_id ? [user.branch_id] : [];
     if (branchIds.length === 0) {
-      return "No branch";
+      return t("employees.noBranch");
     }
     const codes = branchIds.map((id) => branchMap.get(id)?.code).filter(Boolean);
     if (codes.length === 0) {
-      return "No branch";
+      return t("employees.noBranch");
     }
     return user.role === "MANAGER" && codes.length > 1 ? `${codes.slice(0, 2).join(", ")}${codes.length > 2 ? ` +${codes.length - 2}` : ""}` : codes[0];
   }
@@ -135,11 +137,11 @@ export default function EmployeesPage() {
     const branchIds = form.role === "MANAGER" ? form.branch_ids : form.branch_id ? [form.branch_id] : [];
     const primaryBranch = branchIds[0] ?? form.branch_id;
     if (!form.name || !form.email || !primaryBranch) {
-      setError("Name, email, and branch are required");
+      setError(t("employees.required"));
       return;
     }
     if (!form.id && form.password.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError(t("employees.passwordMin"));
       return;
     }
     try {
@@ -152,7 +154,7 @@ export default function EmployeesPage() {
           branch_ids: branchIds,
           status: form.status
         });
-        setNotice("Employee updated");
+        setNotice(t("employees.updated"));
       } else {
         await api.createUser({
           name: form.name,
@@ -163,12 +165,12 @@ export default function EmployeesPage() {
           branch_ids: branchIds,
           status: form.status
         });
-        setNotice("Employee created");
+        setNotice(t("employees.created"));
       }
       closeForm();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : t("products.saveFailed"));
     }
   }
 
@@ -176,14 +178,14 @@ export default function EmployeesPage() {
     <AppShell>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Employees</h1>
+          <h1 className="text-2xl font-bold">{t("employees.title")}</h1>
           <p className="text-sm text-slate-500">
-            {currentUser?.role === "MANAGER" ? "Manage employees in your assigned branches." : "Manage employees and review personal sales."}
+            {currentUser?.role === "MANAGER" ? t("employees.managerDescription") : t("employees.ownerDescription")}
           </p>
         </div>
         <Button onClick={createEmployee}>
           <UserPlus className="h-4 w-4" />
-          New Employee
+          {t("employees.new")}
         </Button>
       </div>
       {notice ? <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div> : null}
@@ -192,7 +194,7 @@ export default function EmployeesPage() {
       <div>
         <section className="space-y-4">
           <div className="overflow-hidden rounded-md border border-line bg-white">
-            {users.length === 0 ? <div className="p-5 text-sm text-slate-500">No employees in your assigned branches.</div> : null}
+            {users.length === 0 ? <div className="p-5 text-sm text-slate-500">{t("employees.empty")}</div> : null}
             {users.map((user) => (
               <button key={user.id} className="flex w-full flex-wrap items-center justify-between gap-3 border-b border-line p-4 text-left last:border-b-0 hover:bg-field" onClick={() => edit(user)}>
                 <div>
@@ -203,7 +205,7 @@ export default function EmployeesPage() {
                 <div className="flex items-center gap-3 text-right text-sm">
                   <div>
                     <div className={user.status === "ACTIVE" ? "font-semibold text-emerald-700" : "font-semibold text-slate-500"}>{user.status}</div>
-                    <div className="text-xs text-slate-500">Edit</div>
+                    <div className="text-xs text-slate-500">{t("common.edit")}</div>
                   </div>
                   <Pencil className="h-4 w-4 text-brand" />
                 </div>
@@ -214,17 +216,17 @@ export default function EmployeesPage() {
           <div className="rounded-md border border-line bg-white p-4">
             <h2 className="mb-3 flex items-center gap-2 font-semibold">
               <BarChart3 className="h-4 w-4 text-brand" />
-              Sales By Employee
+              {t("employees.salesTitle")}
             </h2>
             <div className="space-y-2">
-              {sales.length === 0 ? <div className="text-sm text-slate-500">No employee sales yet.</div> : null}
+              {sales.length === 0 ? <div className="text-sm text-slate-500">{t("employees.noSales")}</div> : null}
               {sales.map((item) => (
                 <div key={item.user_id} className="grid gap-2 rounded-md bg-field p-3 text-sm md:grid-cols-[1fr_120px_120px] md:items-center">
                   <div>
                     <div className="font-semibold">{item.name}</div>
                     <div className="text-xs text-slate-500">{item.branch_code} · {item.email}</div>
                   </div>
-                  <div>{item.sales_count} sale(s)</div>
+                  <div>{item.sales_count} {t("employees.saleCount")}</div>
                   <div className="font-bold md:text-right">{money(item.revenue)}</div>
                 </div>
               ))}
@@ -239,47 +241,47 @@ export default function EmployeesPage() {
               <div>
                 <h2 className="flex items-center gap-2 text-lg font-bold">
                   <UserPlus className="h-5 w-5 text-brand" />
-                  {form.id ? "Edit Employee" : "New Employee"}
+                  {form.id ? t("employees.edit") : t("employees.new")}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {form.id ? "Update employee profile, branch, role, and status." : "Create a new employee account for an assigned branch."}
+                  {form.id ? t("employees.editDescription") : t("employees.createDescription")}
                 </p>
               </div>
               <button
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-line text-slate-600 hover:bg-field"
                 onClick={closeForm}
-                aria-label="Close employee form"
+                aria-label={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-sm font-semibold sm:col-span-2">
-                Name
+                {t("field.name")}
                 <Input className="mt-1" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
               </label>
               <label className="block text-sm font-semibold sm:col-span-2">
-                Email
+                {t("field.email")}
                 <Input className="mt-1" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
               </label>
               {!form.id ? (
                 <label className="block text-sm font-semibold sm:col-span-2">
-                  Password
+                  {t("field.password")}
                   <Input className="mt-1" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
                 </label>
               ) : null}
               <label className="block text-sm font-semibold">
-                Role
+                {t("field.role")}
                 <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.role} onChange={(event) => setRole(event.target.value as Role)}>
-                  <option value="EMPLOYEE">Employee</option>
-                  {currentUser?.role === "OWNER" ? <option value="MANAGER">Manager</option> : null}
+                  <option value="EMPLOYEE">{t("role.employee")}</option>
+                  {currentUser?.role === "OWNER" ? <option value="MANAGER">{t("role.manager")}</option> : null}
                 </select>
               </label>
               {form.role === "MANAGER" && currentUser?.role === "OWNER" ? (
                 <div className="sm:col-span-2">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold">Managed Branches</div>
-                    <div className="text-xs text-slate-500">{form.branch_ids.length} selected</div>
+                    <div className="text-sm font-semibold">{t("employees.managedBranches")}</div>
+                    <div className="text-xs text-slate-500">{form.branch_ids.length} {t("common.selected")}</div>
                   </div>
                   <div className="grid max-h-52 gap-2 overflow-y-auto rounded-md border border-line bg-field p-2 sm:grid-cols-2">
                     {branches.map((branch) => {
@@ -302,11 +304,11 @@ export default function EmployeesPage() {
                       );
                     })}
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">Managers can view dashboard, stock, employees, and branch sales only for selected branches.</p>
+                  <p className="mt-2 text-xs text-slate-500">{t("employees.managerBranchHelp")}</p>
                 </div>
               ) : (
                 <label className="block text-sm font-semibold">
-                  Branch
+                  {t("field.branch")}
                   <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.branch_id} onChange={(event) => setForm({ ...form, branch_id: event.target.value, branch_ids: event.target.value ? [event.target.value] : [] })}>
                     {branches.map((branch) => (
                       <option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>
@@ -315,20 +317,20 @@ export default function EmployeesPage() {
                 </label>
               )}
               <label className="block text-sm font-semibold sm:col-span-2">
-                Status
+                {t("field.status")}
                 <select className="mt-1 h-10 w-full rounded-md border border-line bg-white px-3 text-sm" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
+                  <option value="ACTIVE">{t("status.active")}</option>
+                  <option value="INACTIVE">{t("status.inactive")}</option>
                 </select>
               </label>
             </div>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button className="!bg-white !text-slate-700 ring-1 ring-line hover:!bg-field" onClick={closeForm}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button onClick={save}>
                 <Save className="h-4 w-4" />
-                Save
+                {t("common.save")}
               </Button>
             </div>
           </div>

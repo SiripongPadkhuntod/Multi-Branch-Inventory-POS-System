@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { api } from "@/services/api";
+import { useI18nStore } from "@/stores/i18n-store";
 import type { Sale, SaleDetail } from "@/types/domain";
 import { CalendarDays, ChevronDown, ChevronUp, CreditCard, Eye, Package, Printer, ReceiptText, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -26,6 +27,7 @@ export default function MySalesPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState("");
+  const t = useI18nStore((state) => state.t);
 
   async function loadSales(nextDateFrom = dateFrom, nextDateTo = dateTo) {
     setLoading(true);
@@ -39,7 +41,7 @@ export default function MySalesPage() {
       setRefundOpen(false);
     } catch (err) {
       setSales([]);
-      setError(err instanceof Error ? err.message : "Cannot load sales");
+      setError(err instanceof Error ? err.message : t("products.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -70,7 +72,7 @@ export default function MySalesPage() {
     try {
       setDetail(await api.saleDetail(sale.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Cannot load receipt detail");
+      setError(err instanceof Error ? err.message : t("sales.loadingDetail"));
     } finally {
       setLoadingDetail(false);
     }
@@ -86,7 +88,7 @@ export default function MySalesPage() {
       setDetail(await api.saleDetail(detail.id));
       await loadSales();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Refund failed");
+      setError(err instanceof Error ? err.message : t("sales.refundFailed"));
     } finally {
       setRefunding(false);
     }
@@ -95,13 +97,13 @@ export default function MySalesPage() {
   return (
     <AppShell>
       <div className="mb-5">
-        <h1 className="text-2xl font-bold">My Sales</h1>
-        <p className="text-sm text-slate-500">Recent receipts created by this account.</p>
+        <h1 className="text-2xl font-bold">{t("sales.myTitle")}</h1>
+        <p className="text-sm text-slate-500">{t("sales.myDescription")}</p>
       </div>
       <section className="mb-4 rounded-md border border-line bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
           <CalendarDays className="h-4 w-4 text-brand" />
-          Filter by receipt date
+          {t("sales.receiptTime")}
         </div>
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto]">
           <label className="block text-sm font-semibold">
@@ -114,11 +116,11 @@ export default function MySalesPage() {
           </label>
           <Button className="self-end" onClick={() => loadSales()}>
             <Search className="h-4 w-4" />
-            Apply
+            {t("common.apply")}
           </Button>
           <Button className="self-end !bg-white !text-slate-700 ring-1 ring-line hover:!bg-field" onClick={clearDateFilter}>
             <X className="h-4 w-4" />
-            Clear
+            {t("common.clear")}
           </Button>
         </div>
       </section>
@@ -126,7 +128,7 @@ export default function MySalesPage() {
       {loading ? <ListSkeleton rows={4} /> : (
       <div className="overflow-hidden rounded-md border border-line bg-white">
         {sales.length === 0 ? (
-          <div className="p-5 text-sm text-slate-500">No sales yet.</div>
+          <div className="p-5 text-sm text-slate-500">{t("sales.empty")}</div>
         ) : (
           sales.map((sale) => (
             <div key={sale.id} className="border-b border-line last:border-b-0">
@@ -148,20 +150,20 @@ export default function MySalesPage() {
               </button>
               {selectedSaleId === sale.id ? (
                 <div className="border-t border-line bg-slate-50 p-4">
-                  {loadingDetail ? <div className="text-sm text-slate-500">Loading receipt detail...</div> : null}
+                  {loadingDetail ? <div className="text-sm text-slate-500">{t("sales.loadingDetail")}</div> : null}
                   {detail ? (
                     <div className="space-y-4">
                       <div className="grid gap-3 text-sm md:grid-cols-3">
                         <div className="rounded-md border border-line bg-white p-3">
-                          <div className="text-xs text-slate-500">Branch</div>
+                          <div className="text-xs text-slate-500">{t("field.branch")}</div>
                           <div className="font-semibold">{detail.branch_code} · {detail.branch_name}</div>
                         </div>
                         <div className="rounded-md border border-line bg-white p-3">
-                          <div className="text-xs text-slate-500">Employee</div>
+                          <div className="text-xs text-slate-500">{t("role.employee")}</div>
                           <div className="font-semibold">{detail.employee_name}</div>
                         </div>
                         <div className="rounded-md border border-line bg-white p-3">
-                          <div className="text-xs text-slate-500">Receipt Time</div>
+                          <div className="text-xs text-slate-500">{t("sales.receiptTime")}</div>
                           <div className="font-semibold">{new Date(detail.created_at).toLocaleString()}</div>
                         </div>
                       </div>
@@ -177,13 +179,13 @@ export default function MySalesPage() {
                               </div>
                             </div>
                             <div>
-                              <div className="text-xs text-slate-500 md:hidden">Qty</div>
+                              <div className="text-xs text-slate-500 md:hidden">{t("sales.qty")}</div>
                               <div className="font-semibold">{item.quantity}</div>
                             </div>
                             <div>
-                              <div className="text-xs text-slate-500 md:hidden">Unit Price</div>
+                              <div className="text-xs text-slate-500 md:hidden">{t("sales.unitPrice")}</div>
                               <div>{money(item.final_price)}</div>
-                              {item.discount_amount > 0 ? <div className="text-xs text-slate-500">Discount {money(item.discount_amount)}</div> : null}
+                              {item.discount_amount > 0 ? <div className="text-xs text-slate-500">{t("field.discount")} {money(item.discount_amount)}</div> : null}
                             </div>
                             <div className="font-bold md:text-right">{money(item.line_total)}</div>
                           </div>
@@ -193,7 +195,7 @@ export default function MySalesPage() {
                         <div className="rounded-md border border-line bg-white p-3">
                           <div className="mb-2 flex items-center gap-2 font-semibold">
                             <CreditCard className="h-4 w-4 text-brand" />
-                            Payments
+                            {t("field.payments")}
                           </div>
                           {detail.payments.map((payment) => (
                             <div key={payment.id} className="flex justify-between py-1 text-sm">
@@ -203,20 +205,20 @@ export default function MySalesPage() {
                           ))}
                         </div>
                         <div className="rounded-md border border-line bg-white p-3 text-sm">
-                          <div className="flex justify-between py-1"><span>Subtotal</span><span>{money(detail.subtotal)}</span></div>
-                          <div className="flex justify-between py-1"><span>Discount</span><span>{money(detail.discount)}</span></div>
-                          <div className="flex justify-between py-1"><span>Tax</span><span>{money(detail.tax)}</span></div>
-                          <div className="mt-2 flex justify-between border-t border-line pt-2 text-lg font-bold"><span>Total</span><span>{money(detail.total)}</span></div>
+                          <div className="flex justify-between py-1"><span>{t("field.subtotal")}</span><span>{money(detail.subtotal)}</span></div>
+                          <div className="flex justify-between py-1"><span>{t("field.discount")}</span><span>{money(detail.discount)}</span></div>
+                          <div className="flex justify-between py-1"><span>{t("sales.tax")}</span><span>{money(detail.tax)}</span></div>
+                          <div className="mt-2 flex justify-between border-t border-line pt-2 text-lg font-bold"><span>{t("field.total")}</span><span>{money(detail.total)}</span></div>
                         </div>
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row">
                         <Button className="bg-slate-800 hover:bg-slate-700" onClick={() => setReceiptOpen(true)}>
                           <Eye className="h-4 w-4" />
-                          View Receipt
+                          {t("pos.viewReceipt")}
                         </Button>
                         <Button onClick={() => printReceipt(detail)}>
                           <Printer className="h-4 w-4" />
-                          Print Receipt
+                          {t("receipt.print")} {t("receipt.title")}
                         </Button>
                         {canRefundSale(detail) ? (
                           <Button className="bg-red-600 hover:bg-red-700" onClick={() => setRefundOpen(true)}>

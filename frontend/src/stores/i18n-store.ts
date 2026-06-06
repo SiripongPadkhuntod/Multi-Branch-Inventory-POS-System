@@ -1,6 +1,6 @@
 "use client";
 
-import { translations, type Language, type TranslationKey } from "@/i18n/translations";
+import { translations, type Language } from "@/i18n/translations";
 import { create } from "zustand";
 
 type I18nState = {
@@ -8,7 +8,7 @@ type I18nState = {
   hydrate: () => void;
   setLanguage: (language: Language) => void;
   toggleLanguage: () => void;
-  t: (key: TranslationKey) => string;
+  t: (key: string) => string;
 };
 
 function storedLanguage(): Language {
@@ -28,21 +28,35 @@ function applyLanguage(language: Language) {
   }
 }
 
+function createTranslator(language: Language) {
+  return (key: string) => {
+    const languageMap = translations[language] as Record<string, string>;
+    const fallbackMap = translations.en as Record<string, string>;
+    return languageMap[key] ?? fallbackMap[key] ?? key;
+  };
+}
+
 export const useI18nStore = create<I18nState>((set, get) => ({
   language: "en",
   hydrate: () => {
     const language = storedLanguage();
     applyLanguage(language);
-    set({ language });
+    if (get().language === language) {
+      return;
+    }
+    set({ language, t: createTranslator(language) });
   },
   setLanguage: (language) => {
     applyLanguage(language);
-    set({ language });
+    if (get().language === language) {
+      return;
+    }
+    set({ language, t: createTranslator(language) });
   },
   toggleLanguage: () => {
     const next = get().language === "en" ? "th" : "en";
     applyLanguage(next);
-    set({ language: next });
+    set({ language: next, t: createTranslator(next) });
   },
-  t: (key) => translations[get().language][key] ?? translations.en[key] ?? key
+  t: createTranslator("en")
 }));

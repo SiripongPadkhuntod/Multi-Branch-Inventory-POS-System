@@ -6,6 +6,7 @@ import { printReceipt, ReceiptModal } from "@/components/sales/receipt-modal";
 import { canRefundSale, SaleStatus } from "@/components/sales/sale-status";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
+import { useI18nStore } from "@/stores/i18n-store";
 import type { Branch, DashboardSummary, EmployeeSalesSummary, Sale, SaleDetail } from "@/types/domain";
 import { BarChart3, ChevronDown, ChevronUp, Eye, Package, Printer, ReceiptText, RotateCcw, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -34,13 +35,14 @@ export default function ReportsPage() {
   const [refundOpen, setRefundOpen] = useState(false);
   const [refunding, setRefunding] = useState(false);
   const [error, setError] = useState("");
+  const t = useI18nStore((state) => state.t);
 
   const selectedBranch = useMemo(() => branches.find((branch) => branch.id === branchId), [branches, branchId]);
 
   useEffect(() => {
     api.myBranches()
       .then((data) => setBranches(Array.isArray(data) ? data : []))
-      .catch((err) => setError(err instanceof Error ? err.message : "Cannot load branches"));
+      .catch((err) => setError(err instanceof Error ? err.message : t("settings.loadFailed")));
   }, []);
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export default function ReportsPage() {
         setSales(Array.isArray(salesData) ? salesData : []);
         setEmployeeSales(Array.isArray(employeeData) ? employeeData : []);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Cannot load reports"));
+      .catch((err) => setError(err instanceof Error ? err.message : t("reports.description")));
   }, [branchId]);
 
   async function toggleDetail(sale: Sale) {
@@ -71,7 +73,7 @@ export default function ReportsPage() {
     try {
       setDetail(await api.saleDetail(sale.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Cannot load receipt detail");
+      setError(err instanceof Error ? err.message : t("sales.loadingDetail"));
     }
   }
 
@@ -88,7 +90,7 @@ export default function ReportsPage() {
       setSales(Array.isArray(salesData) ? salesData : []);
       setEmployeeSales(Array.isArray(employeeData) ? employeeData : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Refund failed");
+      setError(err instanceof Error ? err.message : t("sales.refundFailed"));
     } finally {
       setRefunding(false);
     }
@@ -100,11 +102,11 @@ export default function ReportsPage() {
     <AppShell>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Reports</h1>
-          <p className="text-sm text-slate-500">{selectedBranch ? `${selectedBranch.code} · ${selectedBranch.name}` : "Sales, products, employees, and branch performance."}</p>
+          <h1 className="text-2xl font-bold">{t("reports.title")}</h1>
+          <p className="text-sm text-slate-500">{selectedBranch ? `${selectedBranch.code} · ${selectedBranch.name}` : t("reports.description")}</p>
         </div>
         <select className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm sm:w-72" value={branchId} onChange={(event) => setBranchId(event.target.value)}>
-          <option value="">All branches</option>
+          <option value="">{t("reports.allBranches")}</option>
           {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>)}
         </select>
       </div>
@@ -112,10 +114,10 @@ export default function ReportsPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          ["Daily Sales", summary.daily_sales.toLocaleString()],
-          ["Monthly Sales", summary.monthly_sales.toLocaleString()],
-          ["Revenue", money(summary.revenue)],
-          ["Profit", money(summary.profit)]
+          [t("dashboard.dailySales"), summary.daily_sales.toLocaleString()],
+          [t("dashboard.monthlySales"), summary.monthly_sales.toLocaleString()],
+          [t("dashboard.revenue"), money(summary.revenue)],
+          [t("dashboard.profit"), money(summary.profit)]
         ].map(([label, value]) => (
           <article key={label} className="rounded-md border border-line bg-white p-4">
             <div className="flex items-center justify-between text-sm text-slate-500"><span>{label}</span><BarChart3 className="h-5 w-5 text-brand" /></div>
@@ -126,9 +128,9 @@ export default function ReportsPage() {
 
       <section className="mt-5 grid gap-4 xl:grid-cols-3">
         <div className="rounded-md border border-line bg-white p-4">
-          <h2 className="font-semibold">Top Products</h2>
+          <h2 className="font-semibold">{t("dashboard.topProducts")}</h2>
           <div className="mt-3 space-y-2">
-            {summary.top_products.length === 0 ? <div className="text-sm text-slate-500">No product sales yet.</div> : null}
+            {summary.top_products.length === 0 ? <div className="text-sm text-slate-500">{t("dashboard.noProductSales")}</div> : null}
             {summary.top_products.map((product) => (
               <div key={product.product_id} className="flex justify-between gap-3 rounded-md bg-field p-3 text-sm">
                 <span className="font-medium">{product.name}</span>
@@ -138,9 +140,9 @@ export default function ReportsPage() {
           </div>
         </div>
         <div className="rounded-md border border-line bg-white p-4">
-          <h2 className="font-semibold">Low Stock</h2>
+          <h2 className="font-semibold">{t("dashboard.lowStock")}</h2>
           <div className="mt-3 space-y-2">
-            {summary.low_stock.length === 0 ? <div className="text-sm text-slate-500">No low stock items.</div> : null}
+            {summary.low_stock.length === 0 ? <div className="text-sm text-slate-500">{t("dashboard.noLowStock")}</div> : null}
             {summary.low_stock.map((item) => (
               <div key={`${item.branch_id}-${item.product_id}`} className="flex justify-between gap-3 rounded-md bg-field p-3 text-sm">
                 <span className="font-medium">{item.branch_code} · {item.product_name}</span>
@@ -150,9 +152,9 @@ export default function ReportsPage() {
           </div>
         </div>
         <div className="rounded-md border border-line bg-white p-4">
-          <h2 className="font-semibold">Sales By Employee</h2>
+          <h2 className="font-semibold">{t("employees.salesTitle")}</h2>
           <div className="mt-3 space-y-2">
-            {filteredEmployeeSales.length === 0 ? <div className="text-sm text-slate-500">No employee sales yet.</div> : null}
+            {filteredEmployeeSales.length === 0 ? <div className="text-sm text-slate-500">{t("employees.noSales")}</div> : null}
             {filteredEmployeeSales.map((item) => (
               <div key={item.user_id} className="rounded-md bg-field p-3 text-sm">
                 <div className="flex items-center gap-2 font-semibold"><Users className="h-4 w-4 text-brand" />{item.name}</div>
@@ -164,8 +166,8 @@ export default function ReportsPage() {
       </section>
 
       <section className="mt-5 overflow-hidden rounded-md border border-line bg-white">
-        <div className="border-b border-line p-4 font-semibold">Receipts</div>
-        {sales.length === 0 ? <div className="p-5 text-sm text-slate-500">No sales yet.</div> : null}
+        <div className="border-b border-line p-4 font-semibold">{t("sales.receipts")}</div>
+        {sales.length === 0 ? <div className="p-5 text-sm text-slate-500">{t("sales.empty")}</div> : null}
         {sales.map((sale) => (
           <div key={sale.id} className="border-b border-line last:border-b-0">
             <button className="flex w-full flex-wrap items-center justify-between gap-3 p-4 text-left hover:bg-field" onClick={() => toggleDetail(sale)}>
@@ -184,9 +186,9 @@ export default function ReportsPage() {
             {selectedSaleId === sale.id && detail ? (
               <div className="border-t border-line bg-slate-50 p-4">
                 <div className="mb-3 grid gap-3 text-sm md:grid-cols-3">
-                  <div className="rounded-md border border-line bg-white p-3"><div className="text-xs text-slate-500">Branch</div><div className="font-semibold">{detail.branch_code} · {detail.branch_name}</div></div>
-                  <div className="rounded-md border border-line bg-white p-3"><div className="text-xs text-slate-500">Employee</div><div className="font-semibold">{detail.employee_name}</div></div>
-                  <div className="rounded-md border border-line bg-white p-3"><div className="text-xs text-slate-500">Total</div><div className="font-semibold">{money(detail.total)}</div></div>
+                  <div className="rounded-md border border-line bg-white p-3"><div className="text-xs text-slate-500">{t("field.branch")}</div><div className="font-semibold">{detail.branch_code} · {detail.branch_name}</div></div>
+                  <div className="rounded-md border border-line bg-white p-3"><div className="text-xs text-slate-500">{t("role.employee")}</div><div className="font-semibold">{detail.employee_name}</div></div>
+                  <div className="rounded-md border border-line bg-white p-3"><div className="text-xs text-slate-500">{t("field.total")}</div><div className="font-semibold">{money(detail.total)}</div></div>
                 </div>
                 <div className="overflow-hidden rounded-md border border-line bg-white">
                   {detail.items.map((item) => (
@@ -200,11 +202,11 @@ export default function ReportsPage() {
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                   <Button className="bg-slate-800 hover:bg-slate-700" onClick={() => setReceiptOpen(true)}>
                     <Eye className="h-4 w-4" />
-                    View Receipt
+                    {t("pos.viewReceipt")}
                   </Button>
                   <Button onClick={() => printReceipt(detail)}>
                     <Printer className="h-4 w-4" />
-                    Print Receipt
+                    {t("receipt.print")} {t("receipt.title")}
                   </Button>
                   {canRefundSale(detail) ? (
                     <Button className="bg-red-600 hover:bg-red-700" onClick={() => setRefundOpen(true)}>

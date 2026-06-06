@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useI18nStore } from "@/stores/i18n-store";
 import type { SaleDetail } from "@/types/domain";
 import { RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -18,6 +19,7 @@ type RefundModalProps = {
 
 export function RefundModal({ open, detail, loading = false, onClose, onConfirm }: RefundModalProps) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const t = useI18nStore((state) => state.t);
 
   useEffect(() => {
     if (!open || !detail) {
@@ -60,9 +62,9 @@ export function RefundModal({ open, detail, loading = false, onClose, onConfirm 
               <RotateCcw className="h-5 w-5 text-brand" />
               Refund / Return
             </h2>
-            <p className="mt-1 text-sm text-slate-500">{detail.receipt_number} · choose item quantities to return to stock.</p>
+            <p className="mt-1 text-sm text-slate-500">{detail.receipt_number} · {t("refund.selectedItems")}</p>
           </div>
-          <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-line text-slate-600 hover:bg-field" onClick={onClose} aria-label="Close refund form">
+          <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-line text-slate-600 hover:bg-field" onClick={onClose} aria-label={t("common.close")}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -78,7 +80,7 @@ export function RefundModal({ open, detail, loading = false, onClose, onConfirm 
                   <div className="text-xs text-slate-500">{item.sku} · sold {item.quantity} · returned {item.returned_quantity} · left {remaining}</div>
                 </div>
                 <label className="block text-sm font-semibold">
-                  Return Qty
+                  {t("sales.qty")}
                   <Input
                     className="mt-1"
                     type="number"
@@ -90,7 +92,7 @@ export function RefundModal({ open, detail, loading = false, onClose, onConfirm 
                   />
                 </label>
                 <div className="text-sm md:text-right">
-                  <div className="text-xs text-slate-500">Refund estimate</div>
+                  <div className="text-xs text-slate-500">{t("refund.estimate")}</div>
                   <div className="font-bold">{money(Math.max(0, Math.min(remaining, quantity)) * item.final_price)}</div>
                 </div>
               </div>
@@ -100,20 +102,20 @@ export function RefundModal({ open, detail, loading = false, onClose, onConfirm 
 
         <div className="mt-4 rounded-md bg-field p-3 text-sm">
           <div className="flex justify-between">
-            <span>Selected items</span>
+            <span>{t("refund.selectedItems")}</span>
             <span className="font-semibold">{selectedItems.reduce((sum, item) => sum + item.quantity, 0)}</span>
           </div>
           <div className="mt-1 flex justify-between">
-            <span>Estimated refund</span>
+            <span>{t("refund.estimatedRefund")}</span>
             <span className="font-bold">{money(refundTotal)}</span>
           </div>
         </div>
 
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button className="!bg-white !text-slate-700 ring-1 ring-line hover:!bg-field" onClick={onClose}>Cancel</Button>
+          <Button className="!bg-white !text-slate-700 ring-1 ring-line hover:!bg-field" onClick={onClose}>{t("common.cancel")}</Button>
           <Button disabled={loading || selectedItems.length === 0} onClick={() => onConfirm(selectedItems)}>
             <RotateCcw className="h-4 w-4" />
-            {loading ? "Refunding..." : "Confirm Refund"}
+            {loading ? t("refund.refunding") : t("refund.confirm")}
           </Button>
         </div>
       </div>
