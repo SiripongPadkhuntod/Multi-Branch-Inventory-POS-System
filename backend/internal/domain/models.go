@@ -112,6 +112,28 @@ type BranchSalesSummary struct {
 	SalesCount int64     `json:"sales_count"`
 }
 
+type Transfer struct {
+	ID              uuid.UUID  `json:"id"`
+	FromBranchID    uuid.UUID  `json:"from_branch_id"`
+	FromBranchCode  string     `json:"from_branch_code"`
+	FromBranchName  string     `json:"from_branch_name"`
+	ToBranchID      uuid.UUID  `json:"to_branch_id"`
+	ToBranchCode    string     `json:"to_branch_code"`
+	ToBranchName    string     `json:"to_branch_name"`
+	Status          string     `json:"status"`
+	RequestedBy     uuid.UUID  `json:"requested_by"`
+	RequestedByName string     `json:"requested_by_name"`
+	ApprovedBy      *uuid.UUID `json:"approved_by"`
+	ApprovedByName  string     `json:"approved_by_name"`
+	ProductID       uuid.UUID  `json:"product_id"`
+	ProductSKU      string     `json:"product_sku"`
+	ProductBarcode  string     `json:"product_barcode"`
+	ProductName     string     `json:"product_name"`
+	Quantity        int64      `json:"quantity"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
 type DashboardSummary struct {
 	DailySales       int64                `json:"daily_sales"`
 	MonthlySales     int64                `json:"monthly_sales"`

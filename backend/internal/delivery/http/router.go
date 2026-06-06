@@ -77,11 +77,51 @@ func registerAuth(r *gin.RouterGroup, cfg config.Config, services *usecase.Servi
 		ok(c, "Login success", gin.H{"access_token": access, "refresh_token": refresh, "user": user})
 	})
 	r.POST("/auth/logout", func(c *gin.Context) {
+		refreshToken := ""
+		if cookie, err := c.Cookie("refresh_token"); err == nil {
+			refreshToken = cookie
+		}
+		if refreshToken == "" {
+			var input struct {
+				RefreshToken string `json:"refresh_token"`
+			}
+			if err := c.ShouldBindJSON(&input); err == nil {
+				refreshToken = strings.TrimSpace(input.RefreshToken)
+			}
+		}
+		_ = services.Auth.RevokeRefresh(c.Request.Context(), refreshToken)
 		c.SetCookie("access_token", "", -1, "/", "", cfg.CookieSecure, true)
 		c.SetCookie("refresh_token", "", -1, "/", "", cfg.CookieSecure, true)
 		ok(c, "Logout success", nil)
 	})
-	r.POST("/auth/refresh", func(c *gin.Context) { ok(c, "Refresh endpoint ready", nil) })
+	r.POST("/auth/refresh", func(c *gin.Context) {
+		refreshToken := ""
+		if cookie, err := c.Cookie("refresh_token"); err == nil {
+			refreshToken = cookie
+		}
+		if refreshToken == "" {
+			var input struct {
+				RefreshToken string `json:"refresh_token"`
+			}
+			if err := c.ShouldBindJSON(&input); err == nil {
+				refreshToken = strings.TrimSpace(input.RefreshToken)
+			}
+		}
+		if refreshToken == "" {
+			fail(c, http.StatusUnauthorized, errors.New("missing refresh token"))
+			return
+		}
+		access, refresh, user, err := services.Auth.Refresh(c.Request.Context(), refreshToken)
+		if err != nil {
+			c.SetCookie("access_token", "", -1, "/", "", cfg.CookieSecure, true)
+			c.SetCookie("refresh_token", "", -1, "/", "", cfg.CookieSecure, true)
+			fail(c, http.StatusUnauthorized, err)
+			return
+		}
+		c.SetCookie("access_token", access, int(cfg.AccessTTL.Seconds()), "/", "", cfg.CookieSecure, true)
+		c.SetCookie("refresh_token", refresh, int(cfg.RefreshTTL.Seconds()), "/", "", cfg.CookieSecure, true)
+		ok(c, "Token refreshed", gin.H{"access_token": access, "refresh_token": refresh, "user": user})
+	})
 	r.GET("/auth/me", middleware.Auth(services.Auth), func(c *gin.Context) {
 		ok(c, "Success", c.MustGet(middleware.CurrentUserKey))
 	})
@@ -311,6 +351,15 @@ func registerInventories(r *gin.RouterGroup, services *usecase.Services) {
 		}
 		ok(c, "Reorder threshold updated", nil)
 	})
+	r.GET("/inventories/transfers", middleware.OwnerOnly(), func(c *gin.Context) {
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "150"))
+		transfers, err := services.Inventory.Transfers(c.Request.Context(), c.Query("status"), limit)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, err)
+			return
+		}
+		ok(c, "Success", transfers)
+	})
 	r.POST("/inventories/transfer", middleware.OwnerOnly(), func(c *gin.Context) {
 		user := c.MustGet(middleware.CurrentUserKey).(domain.User)
 		var input struct {
@@ -323,12 +372,43 @@ func registerInventories(r *gin.RouterGroup, services *usecase.Services) {
 			fail(c, http.StatusBadRequest, err)
 			return
 		}
-		if err := services.Inventory.Transfer(c.Request.Context(), input.FromBranchID, input.ToBranchID, input.ProductID, user.ID, input.Quantity); err != nil {
+		transfer, err := services.Inventory.CreateTransfer(c.Request.Context(), input.FromBranchID, input.ToBranchID, input.ProductID, user.ID, input.Quantity)
+		if err != nil {
 			fail(c, http.StatusBadRequest, err)
 			return
 		}
-		ok(c, "Stock transferred", nil)
+		created(c, "Transfer requested", transfer)
 	})
+	r.POST("/inventories/transfers/:id/approve", middleware.OwnerOnly(), transferAction(services, "approve"))
+	r.POST("/inventories/transfers/:id/reject", middleware.OwnerOnly(), transferAction(services, "reject"))
+	r.POST("/inventories/transfers/:id/complete", middleware.OwnerOnly(), transferAction(services, "complete"))
+}
+
+func transferAction(services *usecase.Services, action string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := c.MustGet(middleware.CurrentUserKey).(domain.User)
+		transferID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			fail(c, http.StatusBadRequest, err)
+			return
+		}
+		var transfer *domain.Transfer
+		switch action {
+		case "approve":
+			transfer, err = services.Inventory.ApproveTransfer(c.Request.Context(), transferID, user.ID)
+		case "reject":
+			transfer, err = services.Inventory.RejectTransfer(c.Request.Context(), transferID, user.ID)
+		case "complete":
+			transfer, err = services.Inventory.CompleteTransfer(c.Request.Context(), transferID, user.ID)
+		default:
+			err = errors.New("unsupported transfer action")
+		}
+		if err != nil {
+			fail(c, http.StatusBadRequest, err)
+			return
+		}
+		ok(c, "Transfer updated", transfer)
+	}
 }
 
 func receiveInventory(services *usecase.Services) gin.HandlerFunc {

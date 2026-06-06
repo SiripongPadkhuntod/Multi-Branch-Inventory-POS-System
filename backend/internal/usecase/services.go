@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -42,6 +44,7 @@ type Claims struct {
 	UserID   uuid.UUID   `json:"user_id"`
 	Role     domain.Role `json:"role"`
 	BranchID *uuid.UUID  `json:"branch_id"`
+	TokenUse string      `json:"token_use"`
 	jwt.RegisteredClaims
 }
 
@@ -58,16 +61,73 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return "", "", nil, errors.New("invalid email or password")
 	}
-	access, err := s.sign(user, s.cfg.AccessTTL)
+	access, err := s.sign(user, s.cfg.AccessTTL, "access")
 	if err != nil {
 		return "", "", nil, err
 	}
-	refresh, err := s.sign(user, s.cfg.RefreshTTL)
-	return access, refresh, user, err
+	refresh, err := s.sign(user, s.cfg.RefreshTTL, "refresh")
+	if err != nil {
+		return "", "", nil, err
+	}
+	if err := s.repo.StoreRefreshToken(ctx, user.ID, tokenHash(refresh), time.Now().Add(s.cfg.RefreshTTL)); err != nil {
+		return "", "", nil, err
+	}
+	return access, refresh, user, nil
 }
 
 func (s *AuthService) FindUser(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	return s.repo.FindUserByID(ctx, id)
+}
+
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (string, string, *domain.User, error) {
+	claims, err := s.ParseToken(refreshToken)
+	if err != nil {
+		return "", "", nil, errors.New("invalid refresh token")
+	}
+	if claims.TokenUse != "refresh" {
+		return "", "", nil, errors.New("invalid refresh token")
+	}
+	refreshHash := tokenHash(refreshToken)
+	active, err := s.repo.IsRefreshTokenActive(ctx, claims.UserID, refreshHash)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if !active {
+		return "", "", nil, errors.New("invalid refresh token")
+	}
+	user, err := s.FindUser(ctx, claims.UserID)
+	if err != nil {
+		return "", "", nil, errors.New("user not found")
+	}
+	if user.Status != "ACTIVE" {
+		return "", "", nil, errors.New("user is inactive")
+	}
+	if err := s.repo.RevokeRefreshToken(ctx, refreshHash); err != nil {
+		return "", "", nil, err
+	}
+	access, err := s.sign(user, s.cfg.AccessTTL, "access")
+	if err != nil {
+		return "", "", nil, err
+	}
+	refresh, err := s.sign(user, s.cfg.RefreshTTL, "refresh")
+	if err != nil {
+		return "", "", nil, err
+	}
+	if err := s.repo.StoreRefreshToken(ctx, user.ID, tokenHash(refresh), time.Now().Add(s.cfg.RefreshTTL)); err != nil {
+		return "", "", nil, err
+	}
+	return access, refresh, user, nil
+}
+
+func (s *AuthService) RevokeRefresh(ctx context.Context, refreshToken string) error {
+	if refreshToken == "" {
+		return nil
+	}
+	claims, err := s.ParseToken(refreshToken)
+	if err != nil || claims.TokenUse != "refresh" {
+		return nil
+	}
+	return s.repo.RevokeRefreshToken(ctx, tokenHash(refreshToken))
 }
 
 func (s *AuthService) ParseToken(tokenString string) (*Claims, error) {
@@ -81,22 +141,32 @@ func (s *AuthService) ParseToken(tokenString string) (*Claims, error) {
 	if !ok || !token.Valid {
 		return nil, errors.New("invalid token")
 	}
+	if claims.TokenUse != "" && claims.TokenUse != "access" && claims.TokenUse != "refresh" {
+		return nil, errors.New("invalid token")
+	}
 	return claims, nil
 }
 
-func (s *AuthService) sign(user *domain.User, ttl time.Duration) (string, error) {
+func (s *AuthService) sign(user *domain.User, ttl time.Duration, tokenUse string) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID:   user.ID,
 		Role:     user.Role,
 		BranchID: user.BranchID,
+		TokenUse: tokenUse,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
+			ID:        uuid.NewString(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(s.cfg.JWTSecret))
+}
+
+func tokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
 
 type ProductService struct{ repo repository.ProductRepository }
@@ -139,8 +209,20 @@ func (s *InventoryService) Adjust(ctx context.Context, branchID, productID, acto
 func (s *InventoryService) SetReorderThreshold(ctx context.Context, branchID, productID uuid.UUID, threshold int64) error {
 	return s.repo.SetReorderThreshold(ctx, branchID, productID, threshold)
 }
-func (s *InventoryService) Transfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) error {
-	return s.repo.Transfer(ctx, fromBranchID, toBranchID, productID, actorID, quantity)
+func (s *InventoryService) CreateTransfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) (*domain.Transfer, error) {
+	return s.repo.CreateTransfer(ctx, fromBranchID, toBranchID, productID, actorID, quantity)
+}
+func (s *InventoryService) Transfers(ctx context.Context, status string, limit int) ([]domain.Transfer, error) {
+	return s.repo.ListTransfers(ctx, status, limit)
+}
+func (s *InventoryService) ApproveTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error) {
+	return s.repo.ApproveTransfer(ctx, transferID, actorID)
+}
+func (s *InventoryService) RejectTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error) {
+	return s.repo.RejectTransfer(ctx, transferID, actorID)
+}
+func (s *InventoryService) CompleteTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error) {
+	return s.repo.CompleteTransfer(ctx, transferID, actorID)
 }
 
 type SaleService struct{ repo repository.SaleRepository }

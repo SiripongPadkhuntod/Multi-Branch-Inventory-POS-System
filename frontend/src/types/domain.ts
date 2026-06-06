@@ -111,6 +111,30 @@ export type ProductStockSummary = {
   branches: BranchStockDetail[];
 };
 
+export type TransferStatus = "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED";
+
+export type Transfer = {
+  id: string;
+  from_branch_id: string;
+  from_branch_code: string;
+  from_branch_name: string;
+  to_branch_id: string;
+  to_branch_code: string;
+  to_branch_name: string;
+  status: TransferStatus;
+  requested_by: string;
+  requested_by_name: string;
+  approved_by: string | null;
+  approved_by_name: string;
+  product_id: string;
+  product_sku: string;
+  product_barcode: string;
+  product_name: string;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Sale = {
   id: string;
   receipt_number: string;

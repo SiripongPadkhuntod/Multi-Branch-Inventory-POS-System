@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"pos-system/backend/internal/domain"
 
@@ -180,17 +181,17 @@ func (r *InventoryRepo) SetReorderThreshold(ctx context.Context, branchID, produ
 	return err
 }
 
-func (r *InventoryRepo) Transfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) error {
+func (r *InventoryRepo) CreateTransfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) (*domain.Transfer, error) {
 	if fromBranchID == toBranchID {
-		return errors.New("source and destination branches must be different")
+		return nil, errors.New("source and destination branches must be different")
 	}
 	if quantity <= 0 {
-		return errors.New("quantity must be greater than zero")
+		return nil, errors.New("quantity must be greater than zero")
 	}
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback(ctx)
 
@@ -200,64 +201,205 @@ func (r *InventoryRepo) Transfer(ctx context.Context, fromBranchID, toBranchID, 
 		WHERE branch_id=$1 AND product_id=$2 AND deleted_at IS NULL
 		FOR UPDATE`, fromBranchID, productID).Scan(&sourceQty)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if sourceQty < quantity {
-		return errors.New("source branch has insufficient stock")
-	}
-
-	_, err = tx.Exec(ctx, `
-		INSERT INTO inventories (branch_id, product_id, quantity)
-		VALUES ($1,$2,0)
-		ON CONFLICT (branch_id, product_id) DO UPDATE SET deleted_at=NULL, updated_at=now()`,
-		toBranchID, productID)
-	if err != nil {
-		return err
-	}
-	var destinationQty int64
-	if err := tx.QueryRow(ctx, `
-		SELECT quantity FROM inventories
-		WHERE branch_id=$1 AND product_id=$2 AND deleted_at IS NULL
-		FOR UPDATE`, toBranchID, productID).Scan(&destinationQty); err != nil {
-		return err
+		return nil, errors.New("source branch has insufficient stock")
 	}
 
 	var transferID uuid.UUID
 	err = tx.QueryRow(ctx, `
 		INSERT INTO transfers (from_branch_id, to_branch_id, status, requested_by, approved_by)
-		VALUES ($1,$2,'COMPLETED',$3,$3)
+		VALUES ($1,$2,'PENDING',$3,NULL)
 		RETURNING id`, fromBranchID, toBranchID, actorID).Scan(&transferID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO transfer_items (transfer_id, product_id, quantity)
 		VALUES ($1,$2,$3)`, transferID, productID, quantity); err != nil {
-		return err
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return r.findTransfer(ctx, transferID)
+}
+
+func (r *InventoryRepo) ListTransfers(ctx context.Context, status string, limit int) ([]domain.Transfer, error) {
+	if limit <= 0 || limit > 300 {
+		limit = 150
+	}
+	status = strings.ToUpper(strings.TrimSpace(status))
+	rows, err := r.db.Query(ctx, transferDetailQuery()+`
+		WHERE t.deleted_at IS NULL
+			AND ($1='' OR t.status=$1)
+		ORDER BY t.created_at DESC
+		LIMIT $2`, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	transfers := make([]domain.Transfer, 0)
+	for rows.Next() {
+		transfer, err := scanTransfer(rows)
+		if err != nil {
+			return nil, err
+		}
+		transfers = append(transfers, transfer)
+	}
+	return transfers, rows.Err()
+}
+
+func (r *InventoryRepo) ApproveTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE transfers
+		SET status='APPROVED', approved_by=$2, updated_at=now()
+		WHERE id=$1 AND status='PENDING' AND deleted_at IS NULL`, transferID, actorID)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, errors.New("transfer is not pending or does not exist")
+	}
+	return r.findTransfer(ctx, transferID)
+}
+
+func (r *InventoryRepo) RejectTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE transfers
+		SET status='REJECTED', approved_by=$2, updated_at=now()
+		WHERE id=$1 AND status='PENDING' AND deleted_at IS NULL`, transferID, actorID)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, errors.New("transfer is not pending or does not exist")
+	}
+	return r.findTransfer(ctx, transferID)
+}
+
+func (r *InventoryRepo) CompleteTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var fromBranchID, toBranchID, productID uuid.UUID
+	var status string
+	var quantity int64
+	err = tx.QueryRow(ctx, `
+		SELECT t.from_branch_id, t.to_branch_id, t.status, ti.product_id, ti.quantity
+		FROM transfers t
+		JOIN transfer_items ti ON ti.transfer_id=t.id AND ti.deleted_at IS NULL
+		WHERE t.id=$1 AND t.deleted_at IS NULL
+		FOR UPDATE OF t`, transferID).Scan(&fromBranchID, &toBranchID, &status, &productID, &quantity)
+	if err != nil {
+		return nil, err
+	}
+	if status != "APPROVED" {
+		return nil, errors.New("transfer must be approved before completion")
+	}
+
+	var sourceQty int64
+	err = tx.QueryRow(ctx, `
+		SELECT quantity FROM inventories
+		WHERE branch_id=$1 AND product_id=$2 AND deleted_at IS NULL
+		FOR UPDATE`, fromBranchID, productID).Scan(&sourceQty)
+	if err != nil {
+		return nil, err
+	}
+	if sourceQty < quantity {
+		return nil, errors.New("source branch has insufficient stock")
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO inventories (branch_id, product_id, quantity)
+		VALUES ($1,$2,0)
+		ON CONFLICT (branch_id, product_id) DO UPDATE SET deleted_at=NULL, updated_at=now()`,
+		toBranchID, productID); err != nil {
+		return nil, err
+	}
+	if err := tx.QueryRow(ctx, `
+		SELECT quantity FROM inventories
+		WHERE branch_id=$1 AND product_id=$2 AND deleted_at IS NULL
+		FOR UPDATE`, toBranchID, productID).Scan(&sourceQty); err != nil {
+		return nil, err
 	}
 
 	if _, err := tx.Exec(ctx, `
 		UPDATE inventories SET quantity=quantity-$3, updated_at=now()
 		WHERE branch_id=$1 AND product_id=$2`, fromBranchID, productID, quantity); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE inventories SET quantity=quantity+$3, updated_at=now()
 		WHERE branch_id=$1 AND product_id=$2`, toBranchID, productID, quantity); err != nil {
-		return err
+		return nil, err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE transfers
+		SET status='COMPLETED', approved_by=COALESCE(approved_by, $2), updated_at=now()
+		WHERE id=$1`, transferID, actorID); err != nil {
+		return nil, err
 	}
 
 	referenceID := transferID.String()
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO inventory_movements (branch_id, product_id, movement_type, quantity, reference_id, created_by)
 		VALUES ($1,$2,$3,$4,$5,$6)`, fromBranchID, productID, domain.MovementTransferOut, -quantity, referenceID, actorID); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO inventory_movements (branch_id, product_id, movement_type, quantity, reference_id, created_by)
 		VALUES ($1,$2,$3,$4,$5,$6)`, toBranchID, productID, domain.MovementTransferIn, quantity, referenceID, actorID); err != nil {
-		return err
+		return nil, err
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return r.findTransfer(ctx, transferID)
+}
 
-	return tx.Commit(ctx)
+func (r *InventoryRepo) findTransfer(ctx context.Context, transferID uuid.UUID) (*domain.Transfer, error) {
+	row := r.db.QueryRow(ctx, transferDetailQuery()+`
+		WHERE t.id=$1 AND t.deleted_at IS NULL`, transferID)
+	transfer, err := scanTransfer(row)
+	if err != nil {
+		return nil, err
+	}
+	return &transfer, nil
+}
+
+func transferDetailQuery() string {
+	return `
+		SELECT t.id, t.from_branch_id, fb.code, fb.name, t.to_branch_id, tb.code, tb.name,
+			t.status, t.requested_by, requester.name, t.approved_by, COALESCE(approver.name, ''),
+			ti.product_id, p.sku, p.barcode, p.name, ti.quantity, t.created_at, t.updated_at
+		FROM transfers t
+		JOIN branches fb ON fb.id=t.from_branch_id
+		JOIN branches tb ON tb.id=t.to_branch_id
+		JOIN users requester ON requester.id=t.requested_by
+		LEFT JOIN users approver ON approver.id=t.approved_by
+		JOIN transfer_items ti ON ti.transfer_id=t.id AND ti.deleted_at IS NULL
+		JOIN products p ON p.id=ti.product_id
+	`
+}
+
+type transferScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTransfer(row transferScanner) (domain.Transfer, error) {
+	var transfer domain.Transfer
+	err := row.Scan(&transfer.ID, &transfer.FromBranchID, &transfer.FromBranchCode, &transfer.FromBranchName,
+		&transfer.ToBranchID, &transfer.ToBranchCode, &transfer.ToBranchName, &transfer.Status,
+		&transfer.RequestedBy, &transfer.RequestedByName, &transfer.ApprovedBy, &transfer.ApprovedByName,
+		&transfer.ProductID, &transfer.ProductSKU, &transfer.ProductBarcode, &transfer.ProductName,
+		&transfer.Quantity, &transfer.CreatedAt, &transfer.UpdatedAt)
+	return transfer, err
 }

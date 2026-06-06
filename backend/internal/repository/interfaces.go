@@ -23,6 +23,9 @@ type Repositories interface {
 type AuthRepository interface {
 	FindUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	FindUserByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	StoreRefreshToken(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time) error
+	IsRefreshTokenActive(ctx context.Context, userID uuid.UUID, tokenHash string) (bool, error)
+	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 }
 
 type ProductRepository interface {
@@ -40,7 +43,11 @@ type InventoryRepository interface {
 	AllStock(ctx context.Context, query string) ([]domain.ProductStockSummary, error)
 	Adjust(ctx context.Context, branchID, productID, actorID uuid.UUID, quantityDelta int64, reason string) error
 	SetReorderThreshold(ctx context.Context, branchID, productID uuid.UUID, threshold int64) error
-	Transfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) error
+	CreateTransfer(ctx context.Context, fromBranchID, toBranchID, productID, actorID uuid.UUID, quantity int64) (*domain.Transfer, error)
+	ListTransfers(ctx context.Context, status string, limit int) ([]domain.Transfer, error)
+	ApproveTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error)
+	RejectTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error)
+	CompleteTransfer(ctx context.Context, transferID, actorID uuid.UUID) (*domain.Transfer, error)
 }
 
 type SaleRepository interface {

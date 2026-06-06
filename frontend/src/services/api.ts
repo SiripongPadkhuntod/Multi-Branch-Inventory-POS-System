@@ -1,4 +1,4 @@
-import type { ApiResponse, AuditLog, Branch, CartItem, Category, DashboardSummary, EmployeeSalesSummary, Inventory, InventoryMovementDetail, PaymentMethod, Product, ProductStockSummary, Role, Sale, SaleDetail, User } from "@/types/domain";
+import type { ApiResponse, AuditLog, Branch, CartItem, Category, DashboardSummary, EmployeeSalesSummary, Inventory, InventoryMovementDetail, PaymentMethod, Product, ProductStockSummary, Role, Sale, SaleDetail, Transfer, User } from "@/types/domain";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
 export const API_ORIGIN = API_URL.replace(/\/api\/v1\/?$/, "");
@@ -10,6 +10,7 @@ export class ApiError extends Error {
 }
 
 let redirectingToLogin = false;
+let refreshPromise: Promise<{ access_token: string; refresh_token: string; user: User }> | null = null;
 
 function clearBrowserSession() {
   if (typeof window === "undefined") {
@@ -35,7 +36,46 @@ function redirectToLogin() {
   });
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+function storeSession(session: { access_token: string; refresh_token: string; user: User }) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.setItem("access_token", session.access_token);
+  localStorage.setItem("refresh_token", session.refresh_token);
+  localStorage.setItem("user", JSON.stringify(session.user));
+}
+
+async function refreshSession() {
+  if (typeof window === "undefined") {
+    throw new ApiError("Cannot refresh session", 401);
+  }
+  if (!refreshPromise) {
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!refreshToken) {
+      throw new ApiError("Session expired", 401);
+    }
+    refreshPromise = fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as ApiResponse<{ access_token: string; refresh_token: string; user: User }>;
+        if (!response.ok || !payload.success) {
+          throw new ApiError(payload.message || "Session expired", response.status);
+        }
+        storeSession(payload.data);
+        return payload.data;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+async function request<T>(path: string, init: RequestInit = {}, retryRefresh = true): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -49,14 +89,23 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const payload = (await response.json()) as ApiResponse<T>;
   if (!response.ok || !payload.success) {
     if (response.status === 401 && !path.startsWith("/auth/login") && !path.startsWith("/auth/logout")) {
-      redirectToLogin();
+      if (retryRefresh && !path.startsWith("/auth/refresh")) {
+        try {
+          await refreshSession();
+          return request<T>(path, init, false);
+        } catch {
+          redirectToLogin();
+        }
+      } else {
+        redirectToLogin();
+      }
     }
     throw new ApiError(payload.message || "Request failed", response.status);
   }
   return payload.data;
 }
 
-async function upload<T>(path: string, body: FormData): Promise<T> {
+async function upload<T>(path: string, body: FormData, retryRefresh = true): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
@@ -68,7 +117,14 @@ async function upload<T>(path: string, body: FormData): Promise<T> {
   });
   const payload = (await response.json()) as ApiResponse<T>;
   if (!response.ok || !payload.success) {
-    if (response.status === 401) {
+    if (response.status === 401 && retryRefresh) {
+      try {
+        await refreshSession();
+        return upload<T>(path, body, false);
+      } catch {
+        redirectToLogin();
+      }
+    } else if (response.status === 401) {
       redirectToLogin();
     }
     throw new ApiError(payload.message || "Upload failed", response.status);
@@ -83,6 +139,7 @@ export const api = {
       body: JSON.stringify({ email, password })
     }),
   logout: () => request<null>("/auth/logout", { method: "POST" }),
+  refresh: () => request<{ access_token: string; refresh_token: string; user: User }>("/auth/refresh", { method: "POST" }, false),
   me: () => request<User>("/auth/me"),
   myBranches: () => request<Branch[]>("/branches/my"),
   createBranch: (input: { code: string; name: string; address: string; phone: string; status: string }) =>
@@ -156,8 +213,10 @@ export const api = {
         reorder_threshold: reorderThreshold
       })
     }),
+  transfers: (status = "") =>
+    request<Transfer[]>(`/inventories/transfers?${new URLSearchParams({ ...(status ? { status } : {}), limit: "150" }).toString()}`),
   transferStock: (fromBranchId: string, toBranchId: string, productId: string, quantity: number) =>
-    request<null>("/inventories/transfer", {
+    request<Transfer>("/inventories/transfer", {
       method: "POST",
       body: JSON.stringify({
         from_branch_id: fromBranchId,
@@ -166,6 +225,9 @@ export const api = {
         quantity
       })
     }),
+  approveTransfer: (id: string) => request<Transfer>(`/inventories/transfers/${id}/approve`, { method: "POST" }),
+  rejectTransfer: (id: string) => request<Transfer>(`/inventories/transfers/${id}/reject`, { method: "POST" }),
+  completeTransfer: (id: string) => request<Transfer>(`/inventories/transfers/${id}/complete`, { method: "POST" }),
   sales: (dateFrom?: string, dateTo?: string) =>
     request<Sale[]>(`/sales${dateFrom || dateTo ? `?${new URLSearchParams({ ...(dateFrom ? { date_from: dateFrom } : {}), ...(dateTo ? { date_to: dateTo } : {}) }).toString()}` : ""}`),
   branchSales: (branchId?: string) => request<Sale[]>(`/sales/branch${branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ""}`),

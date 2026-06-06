@@ -6,7 +6,7 @@ import { create } from "zustand";
 type AuthState = {
 	user: User | null;
 	hydrate: () => void;
-	setSession: (user: User, accessToken: string) => void;
+	setSession: (user: User, accessToken: string, refreshToken?: string) => void;
 	clear: () => void;
 };
 
@@ -29,8 +29,11 @@ function storedUser() {
 export const useAuthStore = create<AuthState>((set) => ({
 	user: null,
 	hydrate: () => set({ user: storedUser() }),
-	setSession: (user, accessToken) => {
+	setSession: (user, accessToken, refreshToken) => {
 		localStorage.setItem("access_token", accessToken);
+		if (refreshToken) {
+			localStorage.setItem("refresh_token", refreshToken);
+		}
 		localStorage.setItem("user", JSON.stringify(user));
 		set({ user });
 	},

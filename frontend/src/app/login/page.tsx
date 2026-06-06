@@ -45,7 +45,7 @@ export default function LoginPage() {
     setError("");
     try {
       const session = await api.login(values.email, values.password);
-      setSession(session.user, session.access_token);
+      setSession(session.user, session.access_token, session.refresh_token);
       router.push(session.user.role === "EMPLOYEE" ? "/pos" : "/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("login.failed"));

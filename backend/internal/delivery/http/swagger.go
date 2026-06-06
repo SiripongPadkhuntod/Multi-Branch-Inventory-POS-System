@@ -176,6 +176,30 @@ const openAPISpec = `{
           "quantity": { "type": "integer", "format": "int64", "minimum": 1 }
         }
       },
+      "Transfer": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "from_branch_id": { "type": "string", "format": "uuid" },
+          "from_branch_code": { "type": "string" },
+          "from_branch_name": { "type": "string" },
+          "to_branch_id": { "type": "string", "format": "uuid" },
+          "to_branch_code": { "type": "string" },
+          "to_branch_name": { "type": "string" },
+          "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED", "COMPLETED"] },
+          "requested_by": { "type": "string", "format": "uuid" },
+          "requested_by_name": { "type": "string" },
+          "approved_by": { "type": "string", "format": "uuid", "nullable": true },
+          "approved_by_name": { "type": "string" },
+          "product_id": { "type": "string", "format": "uuid" },
+          "product_sku": { "type": "string" },
+          "product_barcode": { "type": "string" },
+          "product_name": { "type": "string" },
+          "quantity": { "type": "integer", "format": "int64" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
       "InventoryMovementDetail": {
         "type": "object",
         "properties": {
@@ -425,13 +449,52 @@ const openAPISpec = `{
         "responses": { "200": { "description": "Stock received" } }
       }
     },
+    "/inventories/transfers": {
+      "get": {
+        "tags": ["Inventory"],
+        "summary": "List stock transfer requests (OWNER)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED", "COMPLETED"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 150 } }
+        ],
+        "responses": { "200": { "description": "Transfer requests" } }
+      }
+    },
     "/inventories/transfer": {
       "post": {
         "tags": ["Inventory"],
-        "summary": "Transfer stock between branches (OWNER)",
+        "summary": "Request a branch stock transfer (OWNER)",
         "security": [{ "bearerAuth": [] }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InventoryTransferRequest" } } } },
-        "responses": { "200": { "description": "Stock transferred" } }
+        "responses": { "201": { "description": "Transfer requested" } }
+      }
+    },
+    "/inventories/transfers/{id}/approve": {
+      "post": {
+        "tags": ["Inventory"],
+        "summary": "Approve a pending transfer (OWNER)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Transfer approved" } }
+      }
+    },
+    "/inventories/transfers/{id}/reject": {
+      "post": {
+        "tags": ["Inventory"],
+        "summary": "Reject a pending transfer (OWNER)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Transfer rejected" } }
+      }
+    },
+    "/inventories/transfers/{id}/complete": {
+      "post": {
+        "tags": ["Inventory"],
+        "summary": "Complete an approved transfer and move stock (OWNER)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Transfer completed" } }
       }
     },
     "/sales": {

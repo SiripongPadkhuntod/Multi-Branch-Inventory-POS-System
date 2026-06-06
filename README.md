@@ -48,10 +48,23 @@ Services:
 - Nginx: http://localhost
 - PostgreSQL: localhost:5433
 
-Seed users:
+Seed users and mock data:
 
 - Owner: `owner@example.com` / `password123`
-- Employee: `employee@example.com` / `password123`
+- Manager Siam: `manager@example.com` / `password123`
+- Manager North: `manager-north@example.com` / `password123`
+- Employee Siam: `employee@example.com` / `password123`
+- Employee North: `employee-north@example.com` / `password123`
+- Employee Phuket: `employee-phuket@example.com` / `password123`
+- No-sales employee: `nosales@example.com` / `password123`
+
+The seed includes demo branches, categories, product images, branch stock, low-stock items, sales, refunds, transfer statuses, movement logs, and audit logs.
+
+To refresh mock data in a running local Docker database:
+
+```bash
+psql postgresql://pos:pos_password@localhost:5433/pos -f backend/seed/001_seed.sql
+```
 
 ## Deploy Notes
 

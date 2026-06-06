@@ -30,6 +30,10 @@ func Auth(auth *usecase.AuthService) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "invalid token"})
 			return
 		}
+		if claims.TokenUse != "" && claims.TokenUse != "access" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "invalid token"})
+			return
+		}
 		user, err := auth.FindUser(c.Request.Context(), claims.UserID)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": "user not found"})
