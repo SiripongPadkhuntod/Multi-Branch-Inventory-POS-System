@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"pos-system/backend/internal/app/domain"
 	"pos-system/backend/internal/delivery/http/middleware"
 	"pos-system/backend/internal/infrastructure/config"
+	objectstorageclient "pos-system/backend/internal/infrastructure/object-storage-client"
 	"pos-system/backend/internal/usecase"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +28,7 @@ func NewRouter(cfg config.Config, services *usecase.Services) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), middleware.CORS())
 	r.Static("/uploads", "./uploads")
+	productStorage, productStorageErr := objectstorageclient.NewMinio(cfg)
 	r.GET("/healthz", func(c *gin.Context) {
 		ok(c, "Healthy", gin.H{
 			"status": "ok",
@@ -41,7 +42,7 @@ func NewRouter(cfg config.Config, services *usecase.Services) *gin.Engine {
 
 	protected := v1.Group("")
 	protected.Use(middleware.Auth(services.Auth))
-	registerProducts(protected, services)
+	registerProducts(protected, services, productStorage, productStorageErr)
 	registerInventories(protected, services)
 	registerSales(protected, services)
 	registerUsers(protected, services)
@@ -127,7 +128,7 @@ func registerAuth(r *gin.RouterGroup, cfg config.Config, services *usecase.Servi
 	})
 }
 
-func registerProducts(r *gin.RouterGroup, services *usecase.Services) {
+func registerProducts(r *gin.RouterGroup, services *usecase.Services, productStorage *objectstorageclient.MinioStorage, productStorageErr error) {
 	r.GET("/products", func(c *gin.Context) {
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
@@ -206,17 +207,17 @@ func registerProducts(r *gin.RouterGroup, services *usecase.Services) {
 			ext = originalExt
 		}
 
-		if err := os.MkdirAll("./uploads/products", 0755); err != nil {
-			fail(c, http.StatusInternalServerError, err)
-			return
-		}
 		filename := fmt.Sprintf("%s%s", uuid.NewString(), ext)
-		destination := filepath.Join("uploads", "products", filename)
-		if err := c.SaveUploadedFile(fileHeader, destination); err != nil {
+		if productStorageErr != nil {
+			fail(c, http.StatusInternalServerError, productStorageErr)
+			return
+		}
+		imageURL, err := productStorage.UploadProductImage(c.Request.Context(), filename, file, fileHeader.Size, contentType)
+		if err != nil {
 			fail(c, http.StatusInternalServerError, err)
 			return
 		}
-		ok(c, "Image uploaded", gin.H{"image_url": "/" + filepath.ToSlash(destination)})
+		ok(c, "Image uploaded", gin.H{"image_url": imageURL})
 	})
 	owner.POST("", func(c *gin.Context) {
 		var input domain.Product

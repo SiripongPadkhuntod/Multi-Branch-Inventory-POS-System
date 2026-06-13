@@ -1,6 +1,6 @@
 # Architecture
 
-This backend follows the same high-level layout
+This backend follows the same high-level layout as `onde-l2e-services-template`.
 
 ## Layout
 
