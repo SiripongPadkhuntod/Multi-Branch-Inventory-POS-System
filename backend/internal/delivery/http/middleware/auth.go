@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"pos-system/backend/internal/domain"
+	"pos-system/backend/internal/app/domain"
 	"pos-system/backend/internal/usecase"
 
 	"github.com/gin-gonic/gin"

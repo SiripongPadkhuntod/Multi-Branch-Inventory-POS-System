@@ -70,6 +70,13 @@ psql postgresql://pos:pos_password@localhost:5433/pos -f backend/seed/001_seed.s
 
 The backend runs SQL migrations automatically on startup. Existing databases that already have the initial tables are baselined, then newer migrations are applied in order.
 
+Backend architecture notes live in `backend/ARCHITECTURE.md`. The runtime entrypoint is `backend/cmd/server`, with DI in `backend/internal/server`.
+
+```bash
+cd backend
+go run ./cmd/server
+```
+
 Recommended Render backend environment:
 
 ```env

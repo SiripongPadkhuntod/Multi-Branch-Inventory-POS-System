@@ -1,7 +1,7 @@
 package postgres
 
 import (
-	"pos-system/backend/internal/repository"
+	"pos-system/backend/internal/app/port"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -31,11 +31,11 @@ func NewRepositories(db *pgxpool.Pool) *Repositories {
 	return r
 }
 
-func (r *Repositories) Auth() repository.AuthRepository             { return r.auth }
-func (r *Repositories) Products() repository.ProductRepository      { return r.products }
-func (r *Repositories) Inventories() repository.InventoryRepository { return r.inventories }
-func (r *Repositories) Sales() repository.SaleRepository            { return r.sales }
-func (r *Repositories) Users() repository.UserRepository            { return r.users }
-func (r *Repositories) Dashboard() repository.DashboardRepository   { return r.dashboard }
-func (r *Repositories) System() repository.SystemRepository         { return r.system }
-func (r *Repositories) Audit() repository.AuditRepository           { return r.audit }
+func (r *Repositories) Auth() port.AuthRepository             { return r.auth }
+func (r *Repositories) Products() port.ProductRepository      { return r.products }
+func (r *Repositories) Inventories() port.InventoryRepository { return r.inventories }
+func (r *Repositories) Sales() port.SaleRepository            { return r.sales }
+func (r *Repositories) Users() port.UserRepository            { return r.users }
+func (r *Repositories) Dashboard() port.DashboardRepository   { return r.dashboard }
+func (r *Repositories) System() port.SystemRepository         { return r.system }
+func (r *Repositories) Audit() port.AuditRepository           { return r.audit }

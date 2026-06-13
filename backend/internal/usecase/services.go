@@ -7,9 +7,9 @@ import (
 	"errors"
 	"time"
 
-	"pos-system/backend/internal/domain"
+	"pos-system/backend/internal/app/domain"
+	"pos-system/backend/internal/app/port"
 	"pos-system/backend/internal/infrastructure/config"
-	"pos-system/backend/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -27,7 +27,7 @@ type Services struct {
 	Audit     *AuditService
 }
 
-func NewServices(repos repository.Repositories, cfg config.Config) *Services {
+func NewServices(repos port.Repositories, cfg config.Config) *Services {
 	return &Services{
 		Auth:      &AuthService{repo: repos.Auth(), cfg: cfg},
 		Products:  &ProductService{repo: repos.Products()},
@@ -49,7 +49,7 @@ type Claims struct {
 }
 
 type AuthService struct {
-	repo repository.AuthRepository
+	repo port.AuthRepository
 	cfg  config.Config
 }
 
@@ -169,7 +169,7 @@ func tokenHash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-type ProductService struct{ repo repository.ProductRepository }
+type ProductService struct{ repo port.ProductRepository }
 
 func (s *ProductService) List(ctx context.Context, query string, limit, offset int) ([]domain.Product, error) {
 	return s.repo.List(ctx, query, limit, offset)
@@ -191,7 +191,7 @@ func (s *ProductService) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 type InventoryService struct {
-	repo repository.InventoryRepository
+	repo port.InventoryRepository
 }
 
 func (s *InventoryService) List(ctx context.Context, branchID *uuid.UUID, categoryID *uuid.UUID, query string) ([]domain.Inventory, error) {
@@ -225,7 +225,7 @@ func (s *InventoryService) CompleteTransfer(ctx context.Context, transferID, act
 	return s.repo.CompleteTransfer(ctx, transferID, actorID)
 }
 
-type SaleService struct{ repo repository.SaleRepository }
+type SaleService struct{ repo port.SaleRepository }
 
 func (s *SaleService) Create(ctx context.Context, actor domain.User, input domain.CreateSaleInput) (*domain.Sale, error) {
 	return s.repo.CreateSale(ctx, actor, input)
@@ -243,7 +243,7 @@ func (s *SaleService) Refund(ctx context.Context, actor domain.User, saleID uuid
 	return s.repo.Refund(ctx, actor, saleID, items)
 }
 
-type UserService struct{ repo repository.UserRepository }
+type UserService struct{ repo port.UserRepository }
 
 func (s *UserService) List(ctx context.Context, actor domain.User) ([]domain.User, error) {
 	return s.repo.List(ctx, actor)
@@ -267,7 +267,7 @@ func (s *UserService) SalesSummary(ctx context.Context, actor domain.User) ([]do
 }
 
 type DashboardService struct {
-	repo repository.DashboardRepository
+	repo port.DashboardRepository
 }
 
 func (s *DashboardService) AccessibleBranches(ctx context.Context, actor domain.User) ([]domain.Branch, error) {
@@ -279,7 +279,7 @@ func (s *DashboardService) Summary(ctx context.Context, actor domain.User, branc
 }
 
 type SystemService struct {
-	repo repository.SystemRepository
+	repo port.SystemRepository
 }
 
 func (s *SystemService) ListCategories(ctx context.Context) ([]domain.Category, error) {
@@ -302,7 +302,7 @@ func (s *SystemService) UpdateBranch(ctx context.Context, id uuid.UUID, branch d
 }
 
 type AuditService struct {
-	repo repository.AuditRepository
+	repo port.AuditRepository
 }
 
 func (s *AuditService) List(ctx context.Context, action, entityType, query string, limit int) ([]domain.AuditLog, error) {

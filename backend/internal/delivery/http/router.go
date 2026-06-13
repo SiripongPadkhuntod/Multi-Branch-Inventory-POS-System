@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"pos-system/backend/internal/app/domain"
 	"pos-system/backend/internal/delivery/http/middleware"
-	"pos-system/backend/internal/domain"
 	"pos-system/backend/internal/infrastructure/config"
 	"pos-system/backend/internal/usecase"
 

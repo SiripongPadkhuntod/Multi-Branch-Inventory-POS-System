@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"pos-system/backend/internal/domain"
+	"pos-system/backend/internal/app/domain"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"

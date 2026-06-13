@@ -2,17 +2,26 @@ package middleware
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 func CORS() gin.HandlerFunc {
 	allowedOrigins := map[string]bool{
-		"http://localhost":                           true,
-		"http://localhost:3000":                      true,
-		"http://127.0.0.1":                           true,
-		"http://127.0.0.1:3000":                      true,
-		"https://multi-branch-inventory-pos-system.vercel.app": true,
+		"http://localhost":      true,
+		"http://localhost:3000": true,
+		"http://127.0.0.1":      true,
+		"http://127.0.0.1:3000": true,
+	}
+	for _, origin := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
+		if trimmed := strings.TrimSpace(origin); trimmed != "" {
+			allowedOrigins[trimmed] = true
+		}
+	}
+	if frontendURL := strings.TrimSpace(os.Getenv("FRONTEND_URL")); frontendURL != "" {
+		allowedOrigins[frontendURL] = true
 	}
 
 	return func(c *gin.Context) {

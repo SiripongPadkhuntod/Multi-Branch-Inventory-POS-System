@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"pos-system/backend/internal/domain"
+	"pos-system/backend/internal/app/domain"
 	"pos-system/backend/internal/infrastructure/config"
 
 	"github.com/google/uuid"
