@@ -42,6 +42,7 @@ func openAPISpec() map[string]any {
 		"servers": []map[string]string{
 			{"url": "http://localhost:8080", "description": "Local Docker / Nginx"},
 			{"url": "http://localhost:3000", "description": "Local frontend proxy"},
+			{"url": "https://multi-branch-inventory-pos-system.onrender.com", "description": "Production server"},
 		},
 		"tags": []map[string]string{
 			{"name": "Auth"},
